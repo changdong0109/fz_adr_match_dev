@@ -1,68 +1,60 @@
 """
-可折叠分组容器 - 使用 QTreeWidget 实现专业的折叠交互
-Collapsible Section Widget using QTreeWidget as the base.
+可折叠部分组件 - 基于 QTreeWidget 的专业折叠实现
 
-这是比 QGroupBox.checkable 更专业的实现方式，提供：
-  1. 原生的树形展开/折叠箭头
-  2. 自动管理状态，无需手动信号连接
-  3. 更清晰的视觉反馈
-  4. 支持嵌套（如需）
+使用 QTreeWidget 提供原生的展开/折叠交互：
+  - 三角形箭头指示器（自动方向切换）
+  - 无需复选框，更专业
+  - 平滑的交互体验
+  - 轻量级，性能好
+
+使用示例：
+    section = CollapsibleSection("部分标题")
+    section.add_widget(your_widget)
+    layout.addWidget(section)
 """
 
 try:
     from qgis.PyQt.QtWidgets import (
-        QTreeWidget, QTreeWidgetItem, QWidget, QVBoxLayout,
-        QHeaderView
+        QTreeWidget, QTreeWidgetItem, QWidget, QVBoxLayout, QHeaderView
     )
     from qgis.PyQt.QtCore import Qt
     QGIS_AVAILABLE = True
 except ImportError:
     QGIS_AVAILABLE = False
 
-# Compatibility: ScrollBar policy constants
-try:
-    SCROLLBAR_AS_NEEDED = Qt.ScrollBarAsNeeded
-except AttributeError:
-    try:
-        SCROLLBAR_AS_NEEDED = Qt.ScrollBarPolicy.ScrollBarAsNeeded
-    except AttributeError:
-        SCROLLBAR_AS_NEEDED = 1  # Fallback to int value
 
-
-class CollapsibleSection(QWidget):
+class CollapsibleSection(QTreeWidget):
     """
-    可折叠分组容器 - 基于 QTreeWidget 实现
+    可折叠的部分容器 - 基于 QTreeWidget 的专业实现
     
-    使用方式：
-        section = CollapsibleSection("数据上传与清洗", expanded=True)
-        section.add_content_widget(your_widget)
-        layout.addWidget(section)
+    提供一个单一的折叠项，用户点击三角形箭头即可展开/折叠。
+    内部通过 add_widget() 添加的 widget 会显示在树项下方。
     """
 
     def __init__(self, title: str, expanded: bool = True, parent=None):
         """
-        初始化可折叠分组
+        初始化可折叠部分
         
         Args:
-            title: 分组标题
-            expanded: 是否默认展开
-            parent: 父组件
+            title: 部分的标题文本
+            expanded: 初始是否展开（默认展开）
+            parent: 父 widget
         """
         super().__init__(parent)
-        self.title = title
-        self.expanded = expanded
-        self._content_widget = None
+        self.setColumnCount(1)
+        self.setHeaderHidden(True)
+        self.setRootIsDecorated(True)
+        self.setAnimated(True)
+        self.setIndentation(0)
         
-        # 创建树形控件（但不显示树形结构）
-        self.tree = QTreeWidget()
-        self.tree.setStyleSheet("""
+        # 隐藏滚动条和边框以获得更清洁的外观
+        self.setStyleSheet("""
             QTreeWidget {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                background-color: #ffffff;
+                border: none;
+                background-color: transparent;
             }
             QTreeWidget::item {
-                padding: 8px;
+                padding: 4px;
                 border: none;
             }
             QTreeWidget::item:hover {
@@ -70,54 +62,73 @@ class CollapsibleSection(QWidget):
             }
         """)
         
-        # 隐藏列头和垂直滚动条
-        self.tree.setHeaderHidden(True)
-        self.tree.setVerticalScrollBarPolicy(SCROLLBAR_AS_NEEDED)
-        self.tree.setIndentation(0)  # 不缩进
-        
-        # 创建根项（标题行）
-        self.root_item = QTreeWidgetItem(self.tree)
+        # 创建根项（标题）
+        self.root_item = QTreeWidgetItem(self)
         self.root_item.setText(0, title)
-        self.root_item.setFlags(
-            self.root_item.flags() | Qt.ItemIsExpanded
-        )
+        self.root_item.setExpanded(expanded)
         
-        # 创建内容项（容纳真实内容）
-        self.content_item = QTreeWidgetItem(self.root_item)
-        self.content_item.setFlags(
-            self.content_item.flags() & ~Qt.ItemIsSelectable
-        )
+        # 创建容器项 - 用来放置用户的 widget
+        self.container_item = QTreeWidgetItem(self.root_item)
+        self.container_item.setText(0, "")
         
-        # 设置默认展开状态
-        self.tree.setItemExpanded(self.root_item, expanded)
+        # 禁用容器项的交互（不能折叠）
+        self.container_item.setFlags(self.container_item.flags() & ~Qt.ItemIsSelectable)
         
-        # 布局
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.tree)
-        self.setLayout(layout)
+        # 存储用户添加的 widget
+        self._user_widget = None
 
-    def add_content_widget(self, widget: QWidget):
+    def add_widget(self, widget: QWidget):
         """
-        添加内容组件到可折叠分组
+        向可折叠部分添加 widget
         
         Args:
             widget: 要添加的 QWidget
         """
-        self._content_widget = widget
-        self.tree.setItemWidget(self.content_item, 0, widget)
-        # 调整树形项高度以适应内容
-        self.tree.resizeColumnToContents(0)
+        self._user_widget = widget
+        # 使用 setItemWidget 将 widget 绑定到容器项
+        self.setItemWidget(self.container_item, 0, widget)
 
-    def is_expanded(self) -> bool:
-        """获取当前展开状态"""
-        return self.tree.isItemExpanded(self.root_item)
+    def add_content_widget(self, widget: QWidget):
+        """
+        向可折叠部分添加内容 widget（add_widget 的别名）
+        
+        Args:
+            widget: 要添加的 QWidget
+        """
+        self.add_widget(widget)
 
     def set_expanded(self, expanded: bool):
-        """设置展开/折叠状态"""
-        self.tree.setItemExpanded(self.root_item, expanded)
+        """
+        设置展开/折叠状态
+        
+        Args:
+            expanded: True 为展开，False 为折叠
+        """
+        self.root_item.setExpanded(expanded)
 
-    def get_content_widget(self) -> QWidget:
-        """获取内容组件"""
-        return self._content_widget
+    def is_expanded(self) -> bool:
+        """
+        获取当前展开状态
+        
+        Returns:
+            bool: True 表示已展开，False 表示已折叠
+        """
+        return self.root_item.isExpanded()
+
+    def set_title(self, title: str):
+        """
+        设置部分标题
+        
+        Args:
+            title: 新标题文本
+        """
+        self.root_item.setText(0, title)
+
+    def get_title(self) -> str:
+        """
+        获取部分标题
+        
+        Returns:
+            str: 当前标题
+        """
+        return self.root_item.text(0)

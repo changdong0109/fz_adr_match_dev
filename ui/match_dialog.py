@@ -16,15 +16,14 @@ try:
         QPushButton, QLabel, QFileDialog, QTableWidget, QTableWidgetItem,
         QHeaderView, QAbstractItemView,
         QComboBox, QDoubleSpinBox, QMessageBox, QProgressBar,
-        QLineEdit, QGroupBox, QScrollArea
+        QLineEdit, QGroupBox, QScrollArea, QFrame
     )
     from qgis.PyQt.QtCore import Qt, pyqtSignal
     QGIS_AVAILABLE = True
 except ImportError:
     QGIS_AVAILABLE = False
 
-# 导入样式管理模块和可折叠组件
-from .styles import get_collapsible_groupbox_style
+# 导入折叠组件（QTreeWidget 实现）
 from .collapsible_section import CollapsibleSection
 
 # Compatibility: obtain enum-like values accepted by QGIS PyQt bindings.
@@ -110,6 +109,21 @@ class MatchDialog(QDialog):
 
         # Console / log viewer (始终显示在上方)
         console_group = QGroupBox("控制台日志")
+        console_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 8px;
+                font-weight: bold;
+                color: #333333;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px 0 3px;
+            }
+        """)
         console_layout = QVBoxLayout()
         self.console_log = QTableWidget()
         self.console_log.setColumnCount(3)
@@ -138,7 +152,6 @@ class MatchDialog(QDialog):
 
         console_group.setLayout(console_layout)
         layout.addWidget(console_group)
-
         # Section 1: 数据上传与清洗 + 预览 (使用 CollapsibleSection)
         clean_content = QWidget()
         cg_layout = QVBoxLayout(clean_content)

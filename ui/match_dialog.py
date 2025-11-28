@@ -129,7 +129,9 @@ class MatchDialog(QDialog):
         clean_group = QGroupBox("1. 数据上传与清洗（左表/右表）")
         clean_group.setCheckable(True)
         clean_group.setChecked(True)
-        cg_layout = QVBoxLayout()
+        clean_content = QWidget()
+        cg_layout = QVBoxLayout(clean_content)
+        cg_layout.setContentsMargins(0, 0, 0, 0)
 
         # file selectors
         file_layout = QHBoxLayout()
@@ -166,7 +168,11 @@ class MatchDialog(QDialog):
         btns.addStretch()
         cg_layout.addLayout(btns)
 
-        clean_group.setLayout(cg_layout)
+        clean_group_layout = QVBoxLayout()
+        clean_group_layout.setContentsMargins(0, 0, 0, 0)
+        clean_group_layout.addWidget(clean_content)
+        clean_group.setLayout(clean_group_layout)
+        clean_group._content_widget = clean_content
         layout.addWidget(clean_group)
         clean_group.toggled.connect(lambda checked, g=clean_group: self._toggle_group_visibility(g, checked))
 
@@ -174,7 +180,9 @@ class MatchDialog(QDialog):
         std_group = QGroupBox("2. 地址标准化")
         std_group.setCheckable(True)
         std_group.setChecked(False)
-        sg_layout = QVBoxLayout()
+        std_content = QWidget()
+        sg_layout = QVBoxLayout(std_content)
+        sg_layout.setContentsMargins(0, 0, 0, 0)
         sg_layout.addWidget(QLabel("选择要标准化的字段（Home 支持单字段演示）"))
         self.std_field_combo = QComboBox()
         sg_layout.addWidget(self.std_field_combo)
@@ -189,7 +197,11 @@ class MatchDialog(QDialog):
         sbtn_layout.addWidget(btn_std_cache)
         sbtn_layout.addStretch()
         sg_layout.addLayout(sbtn_layout)
-        std_group.setLayout(sg_layout)
+        std_group_layout = QVBoxLayout()
+        std_group_layout.setContentsMargins(0, 0, 0, 0)
+        std_group_layout.addWidget(std_content)
+        std_group.setLayout(std_group_layout)
+        std_group._content_widget = std_content
         layout.addWidget(std_group)
         std_group.toggled.connect(lambda checked, g=std_group: self._toggle_group_visibility(g, checked))
 
@@ -197,7 +209,9 @@ class MatchDialog(QDialog):
         rel_group = QGroupBox("3. 智能字段匹配关系（示例）")
         rel_group.setCheckable(True)
         rel_group.setChecked(False)
-        rl_layout = QVBoxLayout()
+        rel_content = QWidget()
+        rl_layout = QVBoxLayout(rel_content)
+        rl_layout.setContentsMargins(0, 0, 0, 0)
         btn_rel = QPushButton("检测字段关系")
         btn_rel.clicked.connect(self._home_run_infer_relations)
         rl_layout.addWidget(btn_rel)
@@ -205,7 +219,11 @@ class MatchDialog(QDialog):
         self.rel_preview.setColumnCount(5)
         self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
         rl_layout.addWidget(self.rel_preview)
-        rel_group.setLayout(rl_layout)
+        rel_group_layout = QVBoxLayout()
+        rel_group_layout.setContentsMargins(0, 0, 0, 0)
+        rel_group_layout.addWidget(rel_content)
+        rel_group.setLayout(rel_group_layout)
+        rel_group._content_widget = rel_content
         layout.addWidget(rel_group)
         rel_group.toggled.connect(lambda checked, g=rel_group: self._toggle_group_visibility(g, checked))
 
@@ -213,7 +231,9 @@ class MatchDialog(QDialog):
         res_group = QGroupBox("4. 匹配与导出")
         res_group.setCheckable(True)
         res_group.setChecked(True)
-        rg_layout = QVBoxLayout()
+        res_content = QWidget()
+        rg_layout = QVBoxLayout(res_content)
+        rg_layout.setContentsMargins(0, 0, 0, 0)
 
         # matching options
         opt_layout = QHBoxLayout()
@@ -245,7 +265,11 @@ class MatchDialog(QDialog):
         self.result_table.setHorizontalHeaderLabels(['左表ID', '右表ID', '匹配类型', '置信度', '左表地址', '右表地址'])
         rg_layout.addWidget(self.result_table)
 
-        res_group.setLayout(rg_layout)
+        res_group_layout = QVBoxLayout()
+        res_group_layout.setContentsMargins(0, 0, 0, 0)
+        res_group_layout.addWidget(res_content)
+        res_group.setLayout(res_group_layout)
+        res_group._content_widget = res_content
         layout.addWidget(res_group)
         res_group.toggled.connect(lambda checked, g=res_group: self._toggle_group_visibility(g, checked))
 
@@ -259,33 +283,13 @@ class MatchDialog(QDialog):
         return tab
 
     def _toggle_group_visibility(self, group: QGroupBox, checked: bool):
-        """Show or hide the children of a checkable QGroupBox while keeping the title visible."""
+        """Show or hide the content widget when a checkable QGroupBox is toggled."""
         try:
-            # prefer a single content widget if attached
             content = getattr(group, '_content_widget', None)
             if content is not None:
                 content.setVisible(checked)
                 content.updateGeometry()
                 group.updateGeometry()
-                return
-
-            layout = group.layout()
-            if layout is None:
-                return
-            for i in range(layout.count()):
-                item = layout.itemAt(i)
-                if item is None:
-                    continue
-                widget = item.widget()
-                if widget is not None:
-                    widget.setVisible(checked)
-                else:
-                    child_layout = item.layout()
-                    if child_layout:
-                        for j in range(child_layout.count()):
-                            w = child_layout.itemAt(j).widget()
-                            if w:
-                                w.setVisible(checked)
         except Exception:
             pass
 

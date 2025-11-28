@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/plugins/fz_adr_match">
+        <file>icons/fz_adr_match.svg</file>
+    </qresource>
+</RCC>
+

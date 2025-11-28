@@ -1,0 +1,21 @@
+[general]
+name=fz_adr_match_dev
+version=0.1.0
+qgisMinimumVersion=3.40
+qgisMaximumVersion=3.99
+author=chang
+email=chang@example.com
+description=地址标准化、GIS 数据增强与匹配工具的 QGIS 插件骨架
+about=集成地址标准化与管网匹配工具的基础插件
+category=Vector
+homepage=https://example.com
+tracker=https://example.com/issues
+repository=https://example.com/repo
+icon=icons/fz_adr_match.svg
+experimental=False
+deprecated=False
+hasProcessingProvider=False
+
+# 明确声明支持 Qt6
+supportsQt5=False
+supportsQt6=True

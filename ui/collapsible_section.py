@@ -32,8 +32,16 @@ class CollapsibleSection(QWidget):
 
         # Outer frame to provide visual boundary between modules
         self._frame = QFrame(self)
-        self._frame.setFrameShape(QFrame.StyledPanel)
-        self._frame.setFrameShadow(QFrame.Plain)
+        # Some QGIS/PyQt bindings don't expose QFrame.StyledPanel/Plain constants.
+        # Use common alternatives that exist across bindings to ensure compatibility.
+        try:
+            self._frame.setFrameShape(QFrame.StyledPanel)
+        except Exception:
+            self._frame.setFrameShape(QFrame.Box)
+        try:
+            self._frame.setFrameShadow(QFrame.Plain)
+        except Exception:
+            self._frame.setFrameShadow(QFrame.Raised)
         self._frame.setObjectName('collapsible_section_frame')
 
         # Main layout for this widget

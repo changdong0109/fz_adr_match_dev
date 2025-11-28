@@ -163,8 +163,17 @@ class MatchDialog(QDialog):
         self.home_file_label.setReadOnly(True)
         btn_select = QPushButton("选择文件(加载到左表)")
         btn_select.clicked.connect(self._home_select_file)
+        # right file selector (quick load to right preview)
+        self.right_file_label = QLineEdit()
+        self.right_file_label.setReadOnly(True)
+        btn_select_right = QPushButton("选择文件(加载到右表)")
+        btn_select_right.clicked.connect(self._home_select_file_right)
+
         file_layout.addWidget(self.home_file_label)
         file_layout.addWidget(btn_select)
+        file_layout.addStretch()
+        file_layout.addWidget(self.right_file_label)
+        file_layout.addWidget(btn_select_right)
         cg_layout.addLayout(file_layout)
 
         # previews
@@ -255,12 +264,14 @@ class MatchDialog(QDialog):
         rg_layout.addLayout(opt_layout)
 
         match_btn_layout = QHBoxLayout()
-        btn_run_match = QPushButton("开始匹配")
-        btn_run_match.clicked.connect(self._home_run_match)
+        self.btn_run_match = QPushButton("开始匹配")
+        self.btn_run_match.clicked.connect(self._home_run_match)
+        # disabled until both tables loaded
+        self.btn_run_match.setEnabled(False)
         btn_export_results = QPushButton("导出匹配结果")
         btn_export_results.clicked.connect(self._home_export_results)
         match_btn_layout.addStretch()
-        match_btn_layout.addWidget(btn_run_match)
+        match_btn_layout.addWidget(self.btn_run_match)
         match_btn_layout.addWidget(btn_export_results)
         rg_layout.addLayout(match_btn_layout)
 
@@ -305,6 +316,33 @@ class MatchDialog(QDialog):
             self._log('INFO', f'Loaded file into left: {file_path}')
         except Exception as e:
             self._log('ERROR', f'Load failed: {e}')
+        finally:
+            # enable match button if both sides present
+            self._update_match_button_state()
+
+    def _home_select_file_right(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件（加载到右表）", "", "所有支持格式 (*.csv *.xlsx *.xls *.shp *.geojson)")
+        if not file_path:
+            return
+        self.right_file_label.setText(file_path)
+        try:
+            from ..core.data_loader import DataLoader
+            data, geom = DataLoader.auto_load(file_path)
+            self.right_data = data
+            self.right_file = file_path
+            self._preview_data(self.right_preview, data)
+            self._log('INFO', f'Loaded file into right: {file_path}')
+        except Exception as e:
+            self._log('ERROR', f'Load failed (right): {e}')
+        finally:
+            self._update_match_button_state()
+
+    def _update_match_button_state(self):
+        try:
+            ok = bool(self.left_data) and bool(self.right_data)
+            self.btn_run_match.setEnabled(ok)
+        except Exception:
+            pass
 
     def _home_run_clean(self):
         if not self.left_data:
@@ -425,7 +463,10 @@ class MatchDialog(QDialog):
         self._log('INFO', f'Exported results to {file_path}')
 
     def _preview_data(self, table: QTableWidget, data: List[Dict]):
+        # If no data, clear the table and return
         if not data:
+            table.setRowCount(0)
+            table.setColumnCount(0)
             return
         table.setRowCount(0)
         table.setColumnCount(0)
@@ -433,10 +474,29 @@ class MatchDialog(QDialog):
         cols = list(first.keys())
         table.setColumnCount(len(cols))
         table.setHorizontalHeaderLabels(cols)
+        # make preview read-only and set consistent header behavior
+        try:
+            table.setEditTriggers(EDIT_TRIGGERS_NONE)
+            table.setSelectionBehavior(SELECT_ROWS)
+            table.verticalHeader().setVisible(False)
+            for i in range(table.columnCount()):
+                # try to set reasonable resize behavior
+                try:
+                    table.horizontalHeader().setSectionResizeMode(i, HEADER_RESIZE_TO_CONTENTS)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         for i, row in enumerate(data[:5]):
             table.insertRow(i)
             for j, col in enumerate(cols):
-                table.setItem(i, j, QTableWidgetItem(str(row.get(col, ''))[:120]))
+                item = QTableWidgetItem(str(row.get(col, ''))[:120])
+                try:
+                    # make the item non-editable
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                except Exception:
+                    pass
+                table.setItem(i, j, item)
 
     def _log(self, level: str, msg: str):
         import datetime

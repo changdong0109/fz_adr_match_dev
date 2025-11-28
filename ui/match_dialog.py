@@ -43,6 +43,7 @@ class MatchDialog(QDialog):
 
         # 创建标签页
         tabs = QTabWidget()
+        tabs.addTab(self._create_home_tab(), "主页")
         tabs.addTab(self._create_data_tab(), "数据加载")
         tabs.addTab(self._create_field_tab(), "字段映射")
         tabs.addTab(self._create_matching_tab(), "匹配配置")
@@ -160,6 +161,130 @@ class MatchDialog(QDialog):
         tab.setLayout(layout)
         return tab
 
+    def _create_home_tab(self) -> QDialog:
+        """主页：折叠式工作流面板（上传/清洗/标准化/匹配/可视化/缓存/日志）"""
+        tab = QDialog()
+        layout = QVBoxLayout()
+
+        # Console / log viewer at top
+        console_group = QGroupBox("控制台日志")
+        console_layout = QVBoxLayout()
+        self.console_log = QTableWidget()
+        self.console_log.setColumnCount(2)
+        self.console_log.setHorizontalHeaderLabels(['时间', '消息'])
+        self.console_log.setMaximumHeight(150)
+        console_layout.addWidget(self.console_log)
+        console_group.setLayout(console_layout)
+        layout.addWidget(console_group)
+
+        # Section 1: 数据清洗（上传 + 清洗 + 缓存）
+        clean_group = QGroupBox("1. 数据上传与清洗")
+        clean_group.setCheckable(True)
+        clean_group.setChecked(True)
+        clean_layout = QVBoxLayout()
+
+        upload_layout = QHBoxLayout()
+        self.home_file_label = QLineEdit()
+        self.home_file_label.setReadOnly(True)
+        upload_btn = QPushButton("选择文件...")
+        upload_btn.clicked.connect(lambda: self._home_select_file())
+        upload_layout.addWidget(self.home_file_label)
+        upload_layout.addWidget(upload_btn)
+        clean_layout.addLayout(upload_layout)
+
+        self.clean_progress = QProgressBar()
+        self.clean_progress.setValue(0)
+        clean_layout.addWidget(self.clean_progress)
+
+        clean_btns = QHBoxLayout()
+        btn_clean_run = QPushButton("执行清洗")
+        btn_clean_run.clicked.connect(lambda: self._home_run_clean())
+        btn_clean_cache = QPushButton("打开清洗缓存")
+        btn_clean_cache.clicked.connect(lambda: self._home_open_cache('clean'))
+        clean_btns.addWidget(btn_clean_run)
+        clean_btns.addWidget(btn_clean_cache)
+        clean_layout.addLayout(clean_btns)
+
+        clean_group.setLayout(clean_layout)
+        layout.addWidget(clean_group)
+
+        # Section 2: 地址标准化
+        std_group = QGroupBox("2. 地址标准化")
+        std_group.setCheckable(True)
+        std_group.setChecked(False)
+        std_layout = QVBoxLayout()
+
+        std_layout.addWidget(QLabel("选择要标准化的字段（可多选）："))
+        self.std_field_combo = QComboBox()
+        std_layout.addWidget(self.std_field_combo)
+
+        self.std_progress = QProgressBar()
+        std_layout.addWidget(self.std_progress)
+
+        std_btns = QHBoxLayout()
+        btn_std_run = QPushButton("执行标准化")
+        btn_std_run.clicked.connect(lambda: self._home_run_standardize())
+        btn_std_cache = QPushButton("打开标准化缓存")
+        btn_std_cache.clicked.connect(lambda: self._home_open_cache('standardize'))
+        std_btns.addWidget(btn_std_run)
+        std_btns.addWidget(btn_std_cache)
+        std_layout.addLayout(std_btns)
+
+        std_group.setLayout(std_layout)
+        layout.addWidget(std_group)
+
+        # Section 3: 智能字段匹配（演示与案例）
+        matchrel_group = QGroupBox("3. 智能字段匹配关系（示例）")
+        matchrel_group.setCheckable(True)
+        matchrel_group.setChecked(False)
+        matchrel_layout = QVBoxLayout()
+
+        btn_rel_run = QPushButton("检测字段关系")
+        btn_rel_run.clicked.connect(lambda: self._home_run_infer_relations())
+        matchrel_layout.addWidget(btn_rel_run)
+
+        self.rel_preview = QTableWidget()
+        self.rel_preview.setColumnCount(5)
+        self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
+        matchrel_layout.addWidget(self.rel_preview)
+
+        matchrel_group.setLayout(matchrel_layout)
+        layout.addWidget(matchrel_group)
+
+        # Section 4: 匹配结果方式配置与导出
+        res_group = QGroupBox("4. 匹配结果与导出")
+        res_group.setCheckable(True)
+        res_group.setChecked(False)
+        res_layout = QVBoxLayout()
+
+        btn_res_run = QPushButton("执行匹配(快速示例)")
+        btn_res_run.clicked.connect(lambda: self._home_run_match())
+        res_layout.addWidget(btn_res_run)
+
+        btn_export_all = QPushButton("导出匹配/未匹配数据")
+        btn_export_all.clicked.connect(lambda: self._home_export_results())
+        res_layout.addWidget(btn_export_all)
+
+        res_group.setLayout(res_layout)
+        layout.addWidget(res_group)
+
+        # Section 5: 地图可视化（打开地图并高亮）
+        vis_group = QGroupBox("5. 地图可视化")
+        vis_group.setCheckable(True)
+        vis_group.setChecked(False)
+        vis_layout = QVBoxLayout()
+        btn_vis = QPushButton("在地图上显示匹配关系")
+        btn_vis.clicked.connect(lambda: self._home_show_on_map())
+        vis_layout.addWidget(btn_vis)
+        vis_group.setLayout(vis_layout)
+        layout.addWidget(vis_group)
+
+        # Spacer
+        layout.addStretch()
+
+        tab.setLayout(layout)
+        return tab
+
     def _create_matching_tab(self) -> QDialog:
         """匹配配置标签页"""
         tab = QDialog()
@@ -267,6 +392,16 @@ class MatchDialog(QDialog):
             # 自动检测字段关联
             if self.left_data and self.right_data:
                 self._detect_field_relations()
+
+            # update home combos and preview
+            try:
+                # populate home field combo with left table fields
+                if self.left_data:
+                    fields = list(self.left_data[0].keys())
+                    self.std_field_combo.clear()
+                    self.std_field_combo.addItems(fields)
+            except Exception:
+                pass
 
             self.progress_bar.setValue(100)
 
@@ -438,6 +573,153 @@ class MatchDialog(QDialog):
         self.stat_matched.setText(f"匹配数: {matched}")
         self.stat_unmatched.setText(f"未匹配数: {unmatched}")
         self.stat_accuracy.setText(f"匹配率: {accuracy:.1f}%")
+
+    # ------------------- Home tab helpers -------------------
+    def _home_select_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件", "", "所有支持格式 (*.csv *.xlsx *.xls *.shp *.geojson)")
+        if not file_path:
+            return
+        self.home_file_label.setText(file_path)
+        # load immediately into left_data for demo convenience
+        try:
+            from ..core.data_loader import DataLoader
+            data, geom = DataLoader.auto_load(file_path)
+            self.left_data = data
+            self.left_file = file_path
+            self._preview_data(self.left_preview, data)
+            self._populate_field_combos('left')
+            self._log('INFO', f'Loaded file for cleaning: {file_path}')
+        except Exception as e:
+            self._log('ERROR', f'Failed to load file: {e}')
+
+    def _home_run_clean(self):
+        # Placeholder cleaning: trim strings and remove empty rows
+        if not self.left_data:
+            QMessageBox.warning(self, '提示', '请先选择文件并加载数据')
+            return
+        self.clean_progress.setValue(10)
+        cleaned = []
+        for row in self.left_data:
+            newrow = {k: (v.strip() if isinstance(v, str) else v) for k, v in row.items()}
+            if any(v not in (None, '') for v in newrow.values()):
+                cleaned.append(newrow)
+        self.left_data = cleaned
+        self._preview_data(self.left_preview, cleaned)
+        self.clean_progress.setValue(80)
+        # cache
+        try:
+            from ..utils.cache import save_cache
+            save_cache('cleaned_left', cleaned)
+            self._log('INFO', f'Clean complete, {len(cleaned)} rows. Cached as cleaned_left.json')
+        except Exception as e:
+            self._log('WARN', f'Cache failed: {e}')
+        self.clean_progress.setValue(100)
+
+    def _home_run_standardize(self):
+        # Simple standardization demo: normalize '北京' vs '北京市'
+        if not self.left_data:
+            QMessageBox.warning(self, '提示', '请先加载数据')
+            return
+        field = self.std_field_combo.currentText()
+        if not field:
+            QMessageBox.warning(self, '提示', '请选择要标准化的字段')
+            return
+        self.std_progress.setValue(10)
+        mapping = {'北京市': '北京', '上海市': '上海'}
+        for row in self.left_data:
+            val = row.get(field)
+            if isinstance(val, str) and val in mapping:
+                row[field] = mapping[val]
+        self._preview_data(self.left_preview, self.left_data)
+        self.std_progress.setValue(80)
+        try:
+            from ..utils.cache import save_cache
+            save_cache('standardized_left', self.left_data)
+            self._log('INFO', f'Standardization complete on field {field}. Cached as standardized_left.json')
+        except Exception as e:
+            self._log('WARN', f'Cache failed: {e}')
+        self.std_progress.setValue(100)
+
+    def _home_run_infer_relations(self):
+        if not self.left_data or not self.right_data:
+            QMessageBox.warning(self, '提示', '请先加载两个数据文件以推断字段关系')
+            return
+        try:
+            from ..core.field_detector import FieldDetector
+            detector = FieldDetector()
+            rels = detector.infer_field_relationships({'left': self.left_data, 'right': self.right_data})
+            self.rel_preview.setRowCount(0)
+            for rel in rels[:50]:
+                s1, f1, s2, f2, score = rel
+                r = self.rel_preview.rowCount()
+                self.rel_preview.insertRow(r)
+                self.rel_preview.setItem(r, 0, QTableWidgetItem(s1))
+                self.rel_preview.setItem(r, 1, QTableWidgetItem(f1))
+                self.rel_preview.setItem(r, 2, QTableWidgetItem(s2))
+                self.rel_preview.setItem(r, 3, QTableWidgetItem(f2))
+                self.rel_preview.setItem(r, 4, QTableWidgetItem(f"{score:.2%}"))
+            self._log('INFO', f'Inferred {len(rels)} relationships')
+        except Exception as e:
+            self._log('ERROR', f'Infer relations failed: {e}')
+
+    def _home_run_match(self):
+        # simple demo: match by first available field
+        if not self.left_data or not self.right_data:
+            QMessageBox.warning(self, '提示', '请先加载两个数据文件')
+            return
+        left_fields = list(self.left_data[0].keys())
+        right_fields = list(self.right_data[0].keys())
+        # choose first pair
+        lf = left_fields[0]
+        rf = right_fields[0]
+        from ..core.match_engine import MatchEngine
+        engine = MatchEngine()
+        results = engine.exact_match(self.left_data, self.right_data, lf, rf)
+        self._display_results(results)
+        self._log('INFO', f'Ran quick match on {lf} -> {rf}, found {len(results)} matches')
+
+    def _home_export_results(self):
+        # placeholder: export displayed results table to CSV
+        if self.result_table.rowCount() == 0:
+            QMessageBox.warning(self, '提示', '当前无匹配结果可导出')
+            return
+        file_path, _ = QFileDialog.getSaveFileName(self, '保存匹配结果', '', 'CSV (*.csv)')
+        if not file_path:
+            return
+        import csv
+        with open(file_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            headers = [self.result_table.horizontalHeaderItem(i).text() for i in range(self.result_table.columnCount())]
+            writer.writerow(headers)
+            for r in range(self.result_table.rowCount()):
+                row = [self.result_table.item(r, c).text() if self.result_table.item(r, c) else '' for c in range(self.result_table.columnCount())]
+                writer.writerow(row)
+        self._log('INFO', f'Exported results to {file_path}')
+
+    def _home_show_on_map(self):
+        # Simple demo: just log (full map integration requires QGIS iface usage)
+        self._log('INFO', 'Map visualization requested (open in QGIS to implement actual drawing)')
+
+    def _home_open_cache(self, name: str):
+        try:
+            from ..utils.cache import load_cache
+            data = load_cache(name if name else 'cleaned_left')
+            if not data:
+                QMessageBox.information(self, '提示', '未找到缓存')
+                return
+            # show a quick preview
+            self._preview_data(self.left_preview, data)
+            self._log('INFO', f'Loaded cache {name}')
+        except Exception as e:
+            self._log('ERROR', f'Open cache failed: {e}')
+
+    def _log(self, level: str, msg: str):
+        # append to console table
+        import datetime
+        r = self.console_log.rowCount()
+        self.console_log.insertRow(r)
+        self.console_log.setItem(r, 0, QTableWidgetItem(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.console_log.setItem(r, 1, QTableWidgetItem(f'[{level}] {msg}'))
 
     def export_results(self):
         """导出匹配结果"""

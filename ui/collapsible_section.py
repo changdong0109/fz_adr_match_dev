@@ -19,6 +19,15 @@ try:
 except ImportError:
     QGIS_AVAILABLE = False
 
+# Compatibility: ScrollBar policy constants
+try:
+    SCROLLBAR_AS_NEEDED = Qt.ScrollBarAsNeeded
+except AttributeError:
+    try:
+        SCROLLBAR_AS_NEEDED = Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    except AttributeError:
+        SCROLLBAR_AS_NEEDED = 1  # Fallback to int value
+
 
 class CollapsibleSection(QWidget):
     """
@@ -63,7 +72,7 @@ class CollapsibleSection(QWidget):
         
         # 隐藏列头和垂直滚动条
         self.tree.setHeaderHidden(True)
-        self.tree.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.tree.setVerticalScrollBarPolicy(SCROLLBAR_AS_NEEDED)
         self.tree.setIndentation(0)  # 不缩进
         
         # 创建根项（标题行）

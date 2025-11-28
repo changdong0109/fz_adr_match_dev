@@ -16,15 +16,16 @@ try:
         QPushButton, QLabel, QFileDialog, QTableWidget, QTableWidgetItem,
         QHeaderView, QAbstractItemView,
         QComboBox, QDoubleSpinBox, QMessageBox, QProgressBar,
-        QLineEdit, QGroupBox
+        QLineEdit, QGroupBox, QScrollArea
     )
     from qgis.PyQt.QtCore import Qt, pyqtSignal
     QGIS_AVAILABLE = True
 except ImportError:
     QGIS_AVAILABLE = False
 
-# 导入样式管理模块
+# 导入样式管理模块和可折叠组件
 from .styles import get_collapsible_groupbox_style
+from .collapsible_section import CollapsibleSection
 
 # Compatibility: obtain enum-like values accepted by QGIS PyQt bindings.
 # Some bindings require the enum attribute (e.g. QAbstractItemView.NoEditTriggers),
@@ -98,9 +99,16 @@ class MatchDialog(QDialog):
 
     def _create_home_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
 
-        # Console / log viewer
+        # 使用 ScrollArea 包装主内容，支持滚动
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
+        layout.setSpacing(8)
+
+        # Console / log viewer (始终显示在上方)
         console_group = QGroupBox("控制台日志")
         console_layout = QVBoxLayout()
         self.console_log = QTableWidget()
@@ -129,12 +137,9 @@ class MatchDialog(QDialog):
         console_layout.addLayout(cbtn_layout)
 
         console_group.setLayout(console_layout)
+        layout.addWidget(console_group)
 
-        # Section: 数据上传与清洗 + 预览
-        clean_group = QGroupBox("1. 数据上传与清洗（左表/右表）")
-        clean_group.setCheckable(True)
-        clean_group.setChecked(True)
-        clean_group.setStyleSheet(get_collapsible_groupbox_style())
+        # Section 1: 数据上传与清洗 + 预览 (使用 CollapsibleSection)
         clean_content = QWidget()
         cg_layout = QVBoxLayout(clean_content)
         cg_layout.setContentsMargins(0, 0, 0, 0)
@@ -174,19 +179,11 @@ class MatchDialog(QDialog):
         btns.addStretch()
         cg_layout.addLayout(btns)
 
-        clean_group_layout = QVBoxLayout()
-        clean_group_layout.setContentsMargins(0, 0, 0, 0)
-        clean_group_layout.addWidget(clean_content)
-        clean_group.setLayout(clean_group_layout)
-        clean_group._content_widget = clean_content
-        layout.addWidget(clean_group)
-        clean_group.toggled.connect(lambda checked, g=clean_group: self._toggle_group_visibility(g, checked))
+        clean_section = CollapsibleSection("1. 数据上传与清洗（左表/右表）", expanded=True)
+        clean_section.add_content_widget(clean_content)
+        layout.addWidget(clean_section)
 
-        # Section: 标准化
-        std_group = QGroupBox("2. 地址标准化")
-        std_group.setCheckable(True)
-        std_group.setChecked(False)
-        std_group.setStyleSheet(get_collapsible_groupbox_style())
+        # Section 2: 标准化 (使用 CollapsibleSection)
         std_content = QWidget()
         sg_layout = QVBoxLayout(std_content)
         sg_layout.setContentsMargins(0, 0, 0, 0)
@@ -204,19 +201,12 @@ class MatchDialog(QDialog):
         sbtn_layout.addWidget(btn_std_cache)
         sbtn_layout.addStretch()
         sg_layout.addLayout(sbtn_layout)
-        std_group_layout = QVBoxLayout()
-        std_group_layout.setContentsMargins(0, 0, 0, 0)
-        std_group_layout.addWidget(std_content)
-        std_group.setLayout(std_group_layout)
-        std_group._content_widget = std_content
-        layout.addWidget(std_group)
-        std_group.toggled.connect(lambda checked, g=std_group: self._toggle_group_visibility(g, checked))
 
-        # Section: 字段推断（演示）
-        rel_group = QGroupBox("3. 智能字段匹配关系（示例）")
-        rel_group.setCheckable(True)
-        rel_group.setChecked(False)
-        rel_group.setStyleSheet(get_collapsible_groupbox_style())
+        std_section = CollapsibleSection("2. 地址标准化", expanded=False)
+        std_section.add_content_widget(std_content)
+        layout.addWidget(std_section)
+
+        # Section 3: 字段推断（演示）(使用 CollapsibleSection)
         rel_content = QWidget()
         rl_layout = QVBoxLayout(rel_content)
         rl_layout.setContentsMargins(0, 0, 0, 0)
@@ -227,19 +217,12 @@ class MatchDialog(QDialog):
         self.rel_preview.setColumnCount(5)
         self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
         rl_layout.addWidget(self.rel_preview)
-        rel_group_layout = QVBoxLayout()
-        rel_group_layout.setContentsMargins(0, 0, 0, 0)
-        rel_group_layout.addWidget(rel_content)
-        rel_group.setLayout(rel_group_layout)
-        rel_group._content_widget = rel_content
-        layout.addWidget(rel_group)
-        rel_group.toggled.connect(lambda checked, g=rel_group: self._toggle_group_visibility(g, checked))
 
-        # Section: 匹配与导出（主页唯一动作入口）
-        res_group = QGroupBox("4. 匹配与导出")
-        res_group.setCheckable(True)
-        res_group.setChecked(True)
-        res_group.setStyleSheet(get_collapsible_groupbox_style())
+        rel_section = CollapsibleSection("3. 智能字段匹配关系（示例）", expanded=False)
+        rel_section.add_content_widget(rel_content)
+        layout.addWidget(rel_section)
+
+        # Section 4: 匹配与导出（主页唯一动作入口）(使用 CollapsibleSection)
         res_content = QWidget()
         rg_layout = QVBoxLayout(res_content)
         rg_layout.setContentsMargins(0, 0, 0, 0)
@@ -274,33 +257,18 @@ class MatchDialog(QDialog):
         self.result_table.setHorizontalHeaderLabels(['左表ID', '右表ID', '匹配类型', '置信度', '左表地址', '右表地址'])
         rg_layout.addWidget(self.result_table)
 
-        res_group_layout = QVBoxLayout()
-        res_group_layout.setContentsMargins(0, 0, 0, 0)
-        res_group_layout.addWidget(res_content)
-        res_group.setLayout(res_group_layout)
-        res_group._content_widget = res_content
-        layout.addWidget(res_group)
-        res_group.toggled.connect(lambda checked, g=res_group: self._toggle_group_visibility(g, checked))
-
-        # place the console/log group at the bottom for better UX
-        layout.addWidget(console_group)
+        res_section = CollapsibleSection("4. 匹配与导出", expanded=True)
+        res_section.add_content_widget(res_content)
+        layout.addWidget(res_section)
 
         # Spacer
         layout.addStretch()
 
-        tab.setLayout(layout)
-        return tab
+        scroll.setWidget(scroll_content)
+        main_layout.addWidget(scroll)
 
-    def _toggle_group_visibility(self, group: QGroupBox, checked: bool):
-        """Show or hide the content widget when a checkable QGroupBox is toggled."""
-        try:
-            content = getattr(group, '_content_widget', None)
-            if content is not None:
-                content.setVisible(checked)
-                content.updateGeometry()
-                group.updateGeometry()
-        except Exception:
-            pass
+        tab.setLayout(main_layout)
+        return tab
 
     # ---------------- Home helpers ----------------
     def _home_select_file(self):

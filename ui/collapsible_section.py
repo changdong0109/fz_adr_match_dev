@@ -34,14 +34,31 @@ class CollapsibleSection(QWidget):
         self._frame = QFrame(self)
         # Some QGIS/PyQt bindings don't expose QFrame.StyledPanel/Plain constants.
         # Use common alternatives that exist across bindings to ensure compatibility.
-        try:
-            self._frame.setFrameShape(QFrame.StyledPanel)
-        except Exception:
-            self._frame.setFrameShape(QFrame.Box)
-        try:
-            self._frame.setFrameShadow(QFrame.Plain)
-        except Exception:
-            self._frame.setFrameShadow(QFrame.Raised)
+        # Some PyQt/PySide bindings used by different QGIS builds may not
+        # expose QFrame enum attributes like StyledPanel/Box/Plain/Raised.
+        # Check availability before calling to avoid AttributeError in the
+        # target environment. If none are available, skip setting shape/shadow.
+        if hasattr(QFrame, 'StyledPanel'):
+            try:
+                self._frame.setFrameShape(QFrame.StyledPanel)
+            except Exception:
+                pass
+        elif hasattr(QFrame, 'Box'):
+            try:
+                self._frame.setFrameShape(QFrame.Box)
+            except Exception:
+                pass
+
+        if hasattr(QFrame, 'Plain'):
+            try:
+                self._frame.setFrameShadow(QFrame.Plain)
+            except Exception:
+                pass
+        elif hasattr(QFrame, 'Raised'):
+            try:
+                self._frame.setFrameShadow(QFrame.Raised)
+            except Exception:
+                pass
         self._frame.setObjectName('collapsible_section_frame')
 
         # Main layout for this widget

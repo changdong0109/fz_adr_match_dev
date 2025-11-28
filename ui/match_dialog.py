@@ -1,8 +1,8 @@
 """
-地址匹配 UI 对话框 - 精简版（仅保留主页）
+地址匹配 UI 对话�?- 精简版（仅保留主页）
 
-此文件已精简：仅保留 `主页` 标签，主页包含文件上传、预览、清洗、标准化、字段推断、快速匹配、导出与日志。
-后续若需扩展其它页面再拆分模块。
+此文件已精简：仅保留 `主页` 标签，主页包含文件上传、预览、清洗、标准化、字段推断、快速匹配、导出与日志�?
+后续若需扩展其它页面再拆分模块�?
 """
 
 from typing import List, Dict, Optional
@@ -21,14 +21,14 @@ try:
 except ImportError:
     QGIS_AVAILABLE = False
 
-# PyQt 常量兼容性处理：直接使用数值常量以避免属性查找问题
+# PyQt 常量兼容性处理：直接使用数值常量以避免属性查找问�?
 # NoEditTriggers = 0, SelectRows = 1, Stretch = 1, ResizeToContents = 1, ResizeMode.Stretch = 1
 EDIT_TRIGGERS_NONE = 0
 SELECTION_BEHAVIOR_ROWS = 1
 
 
 class MatchDialog(QDialog):
-    """精简的地址匹配对话框，仅保留主页功能"""
+    """精简的地址匹配对话框，仅保留主页功�?""
 
     match_completed = pyqtSignal(list)
 
@@ -43,7 +43,7 @@ class MatchDialog(QDialog):
         self.left_file = None
         self.right_file = None
 
-        # 初始化 UI
+        # 初始�?UI
         self.init_ui()
 
     def init_ui(self):
@@ -53,7 +53,7 @@ class MatchDialog(QDialog):
         tabs.addTab(self._create_home_tab(), "主页")
         layout.addWidget(tabs)
 
-        # 只保留主页；底部按钮由主页内部控制（避免重复）
+        # 只保留主页；底部按钮由主页内部控制（避免重复�?
         self.setLayout(layout)
 
     def _create_home_tab(self) -> QWidget:
@@ -61,7 +61,7 @@ class MatchDialog(QDialog):
         layout = QVBoxLayout()
 
         # Console / log viewer
-        console_group = QGroupBox("控制台日志")
+        console_group = QGroupBox("控制台日�?)
         console_layout = QVBoxLayout()
         self.console_log = QTableWidget()
         self.console_log.setColumnCount(3)
@@ -71,9 +71,9 @@ class MatchDialog(QDialog):
         self.console_log.setSelectionBehavior(SELECTION_BEHAVIOR_ROWS)
         self.console_log.setWordWrap(True)
         self.console_log.verticalHeader().setVisible(False)
-        self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.console_log.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.console_log.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.console_log.horizontalHeader().setSectionResizeMode($1, 1)
+        self.console_log.horizontalHeader().setSectionResizeMode($1, 1)
+        self.console_log.horizontalHeader().setSectionResizeMode(2, 1)
         console_layout.addWidget(self.console_log)
 
         # console control buttons
@@ -90,8 +90,8 @@ class MatchDialog(QDialog):
         console_group.setLayout(console_layout)
         layout.addWidget(console_group)
 
-        # Section: 数据上传与清洗 + 预览
-        clean_group = QGroupBox("1. 数据上传与清洗（左表/右表）")
+        # Section: 数据上传与清�?+ 预览
+        clean_group = QGroupBox("1. 数据上传与清洗（左表/右表�?)
         clean_group.setCheckable(True)
         clean_group.setChecked(True)
         cg_layout = QVBoxLayout()
@@ -100,7 +100,7 @@ class MatchDialog(QDialog):
         file_layout = QHBoxLayout()
         self.home_file_label = QLineEdit()
         self.home_file_label.setReadOnly(True)
-        btn_select = QPushButton("选择文件(加载到左表)")
+        btn_select = QPushButton("选择文件(加载到左�?")
         btn_select.clicked.connect(self._home_select_file)
         file_layout.addWidget(self.home_file_label)
         file_layout.addWidget(btn_select)
@@ -134,8 +134,8 @@ class MatchDialog(QDialog):
         clean_group.setLayout(cg_layout)
         layout.addWidget(clean_group)
 
-        # Section: 标准化
-        std_group = QGroupBox("2. 地址标准化")
+        # Section: 标准�?
+        std_group = QGroupBox("2. 地址标准�?)
         std_group.setCheckable(True)
         std_group.setChecked(False)
         sg_layout = QVBoxLayout()
@@ -145,9 +145,9 @@ class MatchDialog(QDialog):
         self.std_progress = QProgressBar()
         sg_layout.addWidget(self.std_progress)
         sbtn_layout = QHBoxLayout()
-        btn_std = QPushButton("执行标准化")
+        btn_std = QPushButton("执行标准�?)
         btn_std.clicked.connect(self._home_run_standardize)
-        btn_std_cache = QPushButton("打开标准化缓存")
+        btn_std_cache = QPushButton("打开标准化缓�?)
         btn_std_cache.clicked.connect(lambda: self._home_open_cache('standardized_left'))
         sbtn_layout.addWidget(btn_std)
         sbtn_layout.addWidget(btn_std_cache)
@@ -161,18 +161,18 @@ class MatchDialog(QDialog):
         rel_group.setCheckable(True)
         rel_group.setChecked(False)
         rl_layout = QVBoxLayout()
-        btn_rel = QPushButton("检测字段关系")
+        btn_rel = QPushButton("检测字段关�?)
         btn_rel.clicked.connect(self._home_run_infer_relations)
         rl_layout.addWidget(btn_rel)
         self.rel_preview = QTableWidget()
         self.rel_preview.setColumnCount(5)
-        self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
+        self.rel_preview.setHorizontalHeaderLabels(['�?', '字段1', '�?', '字段2', '相似�?])
         rl_layout.addWidget(self.rel_preview)
         rel_group.setLayout(rl_layout)
         layout.addWidget(rel_group)
 
-        # Section: 匹配与导出（主页唯一动作入口）
-        res_group = QGroupBox("4. 匹配与导出")
+        # Section: 匹配与导出（主页唯一动作入口�?
+        res_group = QGroupBox("4. 匹配与导�?)
         res_group.setCheckable(True)
         res_group.setChecked(True)
         rg_layout = QVBoxLayout()
@@ -186,13 +186,13 @@ class MatchDialog(QDialog):
         self.fuzzy_threshold.setValue(0.7)
         opt_layout.addWidget(QLabel('匹配类型:'))
         opt_layout.addWidget(self.match_type)
-        opt_layout.addWidget(QLabel('模糊阈值:'))
+        opt_layout.addWidget(QLabel('模糊阈�?'))
         opt_layout.addWidget(self.fuzzy_threshold)
         opt_layout.addStretch()
         rg_layout.addLayout(opt_layout)
 
         match_btn_layout = QHBoxLayout()
-        btn_run_match = QPushButton("开始匹配")
+        btn_run_match = QPushButton("开始匹�?)
         btn_run_match.clicked.connect(self._home_run_match)
         btn_export_results = QPushButton("导出匹配结果")
         btn_export_results.clicked.connect(self._home_export_results)
@@ -204,7 +204,7 @@ class MatchDialog(QDialog):
         # result preview table (home shows a small summary)
         self.result_table = QTableWidget()
         self.result_table.setColumnCount(6)
-        self.result_table.setHorizontalHeaderLabels(['左表ID', '右表ID', '匹配类型', '置信度', '左表地址', '右表地址'])
+        self.result_table.setHorizontalHeaderLabels(['左表ID', '右表ID', '匹配类型', '置信�?, '左表地址', '右表地址'])
         rg_layout.addWidget(self.result_table)
 
         res_group.setLayout(rg_layout)
@@ -218,7 +218,7 @@ class MatchDialog(QDialog):
 
     # ---------------- Home helpers ----------------
     def _home_select_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件（加载到左表）", "", "所有支持格式 (*.csv *.xlsx *.xls *.shp *.geojson)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件（加载到左表�?, "", "所有支持格�?(*.csv *.xlsx *.xls *.shp *.geojson)")
         if not file_path:
             return
         self.home_file_label.setText(file_path)
@@ -241,7 +241,7 @@ class MatchDialog(QDialog):
 
     def _home_run_clean(self):
         if not self.left_data:
-            QMessageBox.warning(self, '提示', '请先选择并加载左表文件')
+            QMessageBox.warning(self, '提示', '请先选择并加载左表文�?)
             return
         self.clean_progress.setValue(10)
         cleaned = []
@@ -266,10 +266,10 @@ class MatchDialog(QDialog):
             return
         field = self.std_field_combo.currentText()
         if not field:
-            QMessageBox.warning(self, '提示', '请选择要标准化的字段')
+            QMessageBox.warning(self, '提示', '请选择要标准化的字�?)
             return
         self.std_progress.setValue(10)
-        mapping = {'北京市': '北京', '上海市': '上海'}
+        mapping = {'北京�?: '北京', '上海�?: '上海'}
         for row in self.left_data:
             val = row.get(field)
             if isinstance(val, str) and val in mapping:
@@ -286,7 +286,7 @@ class MatchDialog(QDialog):
 
     def _home_run_infer_relations(self):
         if not self.left_data or not self.right_data:
-            QMessageBox.warning(self, '提示', '请加载左/右表以推断字段关系')
+            QMessageBox.warning(self, '提示', '请加载左/右表以推断字段关�?)
             return
         try:
             from ..core.field_detector import FieldDetector
@@ -308,7 +308,7 @@ class MatchDialog(QDialog):
 
     def _home_run_match(self):
         if not self.left_data or not self.right_data:
-            QMessageBox.warning(self, '提示', '请先加载左/右表')
+            QMessageBox.warning(self, '提示', '请先加载�?右表')
             return
         from ..core.match_engine import MatchEngine
         engine = MatchEngine(fuzzy_threshold=self.fuzzy_threshold.value())
@@ -404,7 +404,7 @@ class MatchDialog(QDialog):
                 writer.writerow([t, lv, msg])
         self._log('INFO', f'Exported log to {file_path}')
 """
-地址匹配 UI 对话框 - QGIS 插件主界面
+地址匹配 UI 对话�?- QGIS 插件主界�?
 """
 
 from typing import List, Dict, Optional
@@ -444,10 +444,10 @@ class MatchDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        """初始化 UI"""
+        """初始�?UI"""
         layout = QVBoxLayout()
 
-        # 创建标签页
+        # 创建标签�?
         tabs = QTabWidget()
         tabs.addTab(self._create_home_tab(), "主页")
         tabs.addTab(self._create_data_tab(), "数据加载")
@@ -480,7 +480,7 @@ class MatchDialog(QDialog):
 
         # 底部按钮
         btn_layout = QHBoxLayout()
-        btn_match = QPushButton("开始匹配")
+        btn_match = QPushButton("开始匹�?)
         btn_match.clicked.connect(self.perform_match)
         btn_export = QPushButton("导出结果")
         btn_export.clicked.connect(self.export_results)
@@ -496,7 +496,7 @@ class MatchDialog(QDialog):
         self.setLayout(layout)
 
     def _create_data_tab(self) -> QDialog:
-        """数据加载标签页"""
+        """数据加载标签�?""
         tab = QDialog()
         layout = QVBoxLayout()
 
@@ -583,7 +583,7 @@ class MatchDialog(QDialog):
             pass
 
     def _create_field_tab(self) -> QDialog:
-        """字段映射标签页"""
+        """字段映射标签�?""
         tab = QDialog()
         layout = QVBoxLayout()
 
@@ -592,7 +592,7 @@ class MatchDialog(QDialog):
         self.field_relations = QTableWidget()
         self.field_relations.setColumnCount(5)
         self.field_relations.setHorizontalHeaderLabels(
-            ['左表字段', '字段类型', '右表字段', '推荐字段', '相似度']
+            ['左表字段', '字段类型', '右表字段', '推荐字段', '相似�?]
         )
         self.field_relations.setMaximumHeight(300)
         layout.addWidget(self.field_relations)
@@ -602,20 +602,20 @@ class MatchDialog(QDialog):
         config_layout = QFormLayout()
 
         self.field_config = []
-        for i in range(3):  # 允许最多 3 组字段配置
+        for i in range(3):  # 允许最�?3 组字段配�?
             left_combo = QComboBox()
             right_combo = QComboBox()
             self.field_config.append((left_combo, right_combo))
 
-            # 创建一个 QWidget 容器，将左右下拉框放入其中，然后作为字段添加到 QFormLayout
+            # 创建一�?QWidget 容器，将左右下拉框放入其中，然后作为字段添加�?QFormLayout
             row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.addWidget(left_combo)
-            row_layout.addWidget(QLabel("→"))
+            row_layout.addWidget(QLabel("�?))
             row_layout.addWidget(right_combo)
 
-            config_layout.addRow(f"匹配字段组 {i + 1}", row_widget)
+            config_layout.addRow(f"匹配字段�?{i + 1}", row_widget)
 
         config_group.setLayout(config_layout)
         layout.addWidget(config_group)
@@ -624,12 +624,12 @@ class MatchDialog(QDialog):
         return tab
 
     def _create_home_tab(self) -> QDialog:
-        """主页：折叠式工作流面板（上传/清洗/标准化/匹配/可视化/缓存/日志）"""
+        """主页：折叠式工作流面板（上传/清洗/标准�?匹配/可视�?缓存/日志�?""
         tab = QDialog()
         layout = QVBoxLayout()
 
         # Console / log viewer at top
-        console_group = QGroupBox("控制台日志")
+        console_group = QGroupBox("控制台日�?)
         console_layout = QVBoxLayout()
         self.console_log = QTableWidget()
         # use 3 columns: 时间, 级别, 消息 (message column will stretch)
@@ -637,14 +637,14 @@ class MatchDialog(QDialog):
         self.console_log.setHorizontalHeaderLabels(['时间', '级别', '消息'])
         self.console_log.setMaximumHeight(200)
         # UX improvements
-        self.console_log.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.console_log.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.console_log.setEditTriggers(0)
+        self.console_log.setSelectionBehavior(1)
         self.console_log.setWordWrap(True)
         self.console_log.verticalHeader().setVisible(False)
         # header sizing: time and level autosize, message stretch
-        self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.console_log.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.console_log.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.console_log.horizontalHeader().setSectionResizeMode($1, 1)
+        self.console_log.horizontalHeader().setSectionResizeMode($1, 1)
+        self.console_log.horizontalHeader().setSectionResizeMode(2, 1)
         console_layout.addWidget(self.console_log)
         console_group.setLayout(console_layout)
         layout.addWidget(console_group)
@@ -652,8 +652,8 @@ class MatchDialog(QDialog):
         # make groupboxes visually consistent
         console_group.setStyleSheet('QGroupBox { font-weight: bold; margin-top: 6px; } QGroupBox::title { subcontrol-origin: margin; left: 6px; padding: 0 3px 0 3px; }')
 
-        # Section 1: 数据清洗（上传 + 清洗 + 缓存）
-        clean_group = QGroupBox("1. 数据上传与清洗")
+        # Section 1: 数据清洗（上�?+ 清洗 + 缓存�?
+        clean_group = QGroupBox("1. 数据上传与清�?)
         clean_group.setCheckable(True)
         clean_group.setChecked(True)
         clean_group.setStyleSheet('QGroupBox { font-weight: bold; }')
@@ -699,8 +699,8 @@ class MatchDialog(QDialog):
         # connect toggled for collapse/expand
         clean_group.toggled.connect(lambda checked, g=clean_group: self._toggle_group_visibility(g, checked))
 
-        # Section 2: 地址标准化
-        std_group = QGroupBox("2. 地址标准化")
+        # Section 2: 地址标准�?
+        std_group = QGroupBox("2. 地址标准�?)
         std_group.setCheckable(True)
         std_group.setChecked(False)
         std_group.setStyleSheet('QGroupBox { font-weight: bold; }')
@@ -709,7 +709,7 @@ class MatchDialog(QDialog):
         std_content_layout = QVBoxLayout(std_content)
         std_content_layout.setContentsMargins(0, 0, 0, 0)
 
-        std_content_layout.addWidget(QLabel("选择要标准化的字段（可多选）："))
+        std_content_layout.addWidget(QLabel("选择要标准化的字段（可多选）�?))
         self.std_field_combo = QComboBox()
         std_content_layout.addWidget(self.std_field_combo)
 
@@ -717,9 +717,9 @@ class MatchDialog(QDialog):
         std_content_layout.addWidget(self.std_progress)
 
         std_btns = QHBoxLayout()
-        btn_std_run = QPushButton("执行标准化")
+        btn_std_run = QPushButton("执行标准�?)
         btn_std_run.clicked.connect(lambda: self._home_run_standardize())
-        btn_std_cache = QPushButton("打开标准化缓存")
+        btn_std_cache = QPushButton("打开标准化缓�?)
         btn_std_cache.clicked.connect(lambda: self._home_open_cache('standardize'))
         std_btns.addWidget(btn_std_run)
         std_btns.addWidget(btn_std_cache)
@@ -734,7 +734,7 @@ class MatchDialog(QDialog):
         layout.addWidget(std_group)
         std_group.toggled.connect(lambda checked, g=std_group: self._toggle_group_visibility(g, checked))
 
-        # Section 3: 智能字段匹配（演示与案例）
+        # Section 3: 智能字段匹配（演示与案例�?
         matchrel_group = QGroupBox("3. 智能字段匹配关系（示例）")
         matchrel_group.setCheckable(True)
         matchrel_group.setChecked(False)
@@ -744,13 +744,13 @@ class MatchDialog(QDialog):
         matchrel_content_layout = QVBoxLayout(matchrel_content)
         matchrel_content_layout.setContentsMargins(0, 0, 0, 0)
 
-        btn_rel_run = QPushButton("检测字段关系")
+        btn_rel_run = QPushButton("检测字段关�?)
         btn_rel_run.clicked.connect(lambda: self._home_run_infer_relations())
         matchrel_content_layout.addWidget(btn_rel_run)
 
         self.rel_preview = QTableWidget()
         self.rel_preview.setColumnCount(5)
-        self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
+        self.rel_preview.setHorizontalHeaderLabels(['�?', '字段1', '�?', '字段2', '相似�?])
         matchrel_content_layout.addWidget(self.rel_preview)
 
         matchrel_group_layout = QVBoxLayout()
@@ -762,8 +762,8 @@ class MatchDialog(QDialog):
         layout.addWidget(matchrel_group)
         matchrel_group.toggled.connect(lambda checked, g=matchrel_group: self._toggle_group_visibility(g, checked))
 
-        # Section 4: 匹配结果方式配置与导出
-        res_group = QGroupBox("4. 匹配结果与导出")
+        # Section 4: 匹配结果方式配置与导�?
+        res_group = QGroupBox("4. 匹配结果与导�?)
         res_group.setCheckable(True)
         res_group.setChecked(False)
         res_group.setStyleSheet('QGroupBox { font-weight: bold; }')
@@ -772,11 +772,11 @@ class MatchDialog(QDialog):
         res_content_layout = QVBoxLayout(res_content)
         res_content_layout.setContentsMargins(0, 0, 0, 0)
 
-        btn_res_run = QPushButton("执行匹配(快速示例)")
+        btn_res_run = QPushButton("执行匹配(快速示�?")
         btn_res_run.clicked.connect(lambda: self._home_run_match())
         res_content_layout.addWidget(btn_res_run)
 
-        btn_export_all = QPushButton("导出匹配/未匹配数据")
+        btn_export_all = QPushButton("导出匹配/未匹配数�?)
         btn_export_all.clicked.connect(lambda: self._home_export_results())
         res_content_layout.addWidget(btn_export_all)
 
@@ -790,7 +790,7 @@ class MatchDialog(QDialog):
         res_group.toggled.connect(lambda checked, g=res_group: self._toggle_group_visibility(g, checked))
 
         # Section 5: 地图可视化（打开地图并高亮）
-        vis_group = QGroupBox("5. 地图可视化")
+        vis_group = QGroupBox("5. 地图可视�?)
         vis_group.setCheckable(True)
         vis_group.setChecked(False)
         vis_group.setStyleSheet('QGroupBox { font-weight: bold; }')
@@ -818,7 +818,7 @@ class MatchDialog(QDialog):
         return tab
 
     def _create_matching_tab(self) -> QDialog:
-        """匹配配置标签页"""
+        """匹配配置标签�?""
         tab = QDialog()
         layout = QVBoxLayout()
 
@@ -827,18 +827,18 @@ class MatchDialog(QDialog):
 
         # 匹配类型选择
         self.match_type = QComboBox()
-        self.match_type.addItems(['精准匹配', '模糊匹配', '多字段组合匹配', '混合匹配'])
+        self.match_type.addItems(['精准匹配', '模糊匹配', '多字段组合匹�?, '混合匹配'])
         config_layout.addRow("匹配类型:", self.match_type)
 
-        # 模糊匹配阈值
+        # 模糊匹配阈�?
         self.fuzzy_threshold = QDoubleSpinBox()
         self.fuzzy_threshold.setRange(0.0, 1.0)
         self.fuzzy_threshold.setValue(0.7)
         self.fuzzy_threshold.setSingleStep(0.05)
-        config_layout.addRow("模糊匹配相似度阈值:", self.fuzzy_threshold)
+        config_layout.addRow("模糊匹配相似度阈�?", self.fuzzy_threshold)
 
         # 其他选项
-        self.case_sensitive = QCheckBox("区分大小写")
+        self.case_sensitive = QCheckBox("区分大小�?)
         config_layout.addRow("", self.case_sensitive)
 
         config_group.setLayout(config_layout)
@@ -858,7 +858,7 @@ class MatchDialog(QDialog):
         return tab
 
     def _create_result_tab(self) -> QDialog:
-        """结果显示标签页"""
+        """结果显示标签�?""
         tab = QDialog()
         layout = QVBoxLayout()
 
@@ -866,9 +866,9 @@ class MatchDialog(QDialog):
         stats_group = QGroupBox("匹配统计")
         stats_layout = QHBoxLayout()
         self.stat_total = QLabel("总记录数: 0")
-        self.stat_matched = QLabel("匹配数: 0")
+        self.stat_matched = QLabel("匹配�? 0")
         self.stat_unmatched = QLabel("未匹配数: 0")
-        self.stat_accuracy = QLabel("匹配率: 0%")
+        self.stat_accuracy = QLabel("匹配�? 0%")
         stats_layout.addWidget(self.stat_total)
         stats_layout.addWidget(self.stat_matched)
         stats_layout.addWidget(self.stat_unmatched)
@@ -876,11 +876,11 @@ class MatchDialog(QDialog):
         stats_group.setLayout(stats_layout)
         layout.addWidget(stats_group)
 
-        # 结果表
+        # 结果�?
         self.result_table = QTableWidget()
         self.result_table.setColumnCount(6)
         self.result_table.setHorizontalHeaderLabels(
-            ['左表ID', '右表ID', '匹配类型', '相信度', '左表地址', '右表地址']
+            ['左表ID', '右表ID', '匹配类型', '相信�?, '左表地址', '右表地址']
         )
         layout.addWidget(self.result_table)
 
@@ -896,7 +896,7 @@ class MatchDialog(QDialog):
                 self,
                 "选择数据文件",
                 "",
-                "所有支持格式 (*.csv *.xlsx *.xls *.shp *.geojson);;CSV (*.csv);;Excel (*.xlsx *.xls);;SHP (*.shp);;GeoJSON (*.geojson)"
+                "所有支持格�?(*.csv *.xlsx *.xls *.shp *.geojson);;CSV (*.csv);;Excel (*.xlsx *.xls);;SHP (*.shp);;GeoJSON (*.geojson)"
             )
 
             if not file_path:
@@ -921,7 +921,7 @@ class MatchDialog(QDialog):
                 self._preview_data(self.right_preview, data)
                 self._populate_field_combos('right')
 
-            # 自动检测字段关联
+            # 自动检测字段关�?
             if self.left_data and self.right_data:
                 self._detect_field_relations()
 
@@ -942,21 +942,21 @@ class MatchDialog(QDialog):
             self.progress_bar.setValue(0)
 
     def _preview_data(self, table: QTableWidget, data: List[Dict]):
-        """在表中显示数据预览"""
+        """在表中显示数据预�?""
         if not data:
             return
 
-        # 清空旧内容
+        # 清空旧内�?
         table.setRowCount(0)
         table.setColumnCount(0)
 
-        # 设置列
+        # 设置�?
         first_row = data[0]
         columns = list(first_row.keys())
         table.setColumnCount(len(columns))
         table.setHorizontalHeaderLabels(columns)
 
-        # 添加行（最多 5 行）
+        # 添加行（最�?5 行）
         for row_idx, row in enumerate(data[:5]):
             table.insertRow(row_idx)
             for col_idx, col_name in enumerate(columns):
@@ -964,7 +964,7 @@ class MatchDialog(QDialog):
                 table.setItem(row_idx, col_idx, QTableWidgetItem(value))
 
     def _populate_field_combos(self, side: str):
-        """填充字段下拉框"""
+        """填充字段下拉�?""
         if side == 'left' and self.left_data:
             fields = list(self.left_data[0].keys())
             for combo, _ in self.field_config:
@@ -977,7 +977,7 @@ class MatchDialog(QDialog):
                 combo.addItems(fields)
 
     def _detect_field_relations(self):
-        """自动检测字段关系"""
+        """自动检测字段关�?""
         try:
             from ..core.field_detector import FieldDetector
 
@@ -991,7 +991,7 @@ class MatchDialog(QDialog):
 
             # 显示关系
             self.field_relations.setRowCount(0)
-            for rel in relationships[:10]:  # 显示前 10 个
+            for rel in relationships[:10]:  # 显示�?10 �?
                 source1, field1, source2, field2, score = rel
                 row_idx = self.field_relations.rowCount()
                 self.field_relations.insertRow(row_idx)
@@ -1003,7 +1003,7 @@ class MatchDialog(QDialog):
                 self.field_relations.setItem(row_idx, 4, QTableWidgetItem(f"{score:.2%}"))
 
         except Exception as e:
-            QMessageBox.warning(self, "警告", f"字段检测失败: {e}")
+            QMessageBox.warning(self, "警告", f"字段检测失�? {e}")
 
     def perform_match(self):
         """执行匹配"""
@@ -1020,7 +1020,7 @@ class MatchDialog(QDialog):
 
             engine = MatchEngine(fuzzy_threshold=threshold)
 
-            # 获取用户选择的字段
+            # 获取用户选择的字�?
             field_pairs = []
             for left_combo, right_combo in self.field_config:
                 left_field = left_combo.currentText()
@@ -1029,7 +1029,7 @@ class MatchDialog(QDialog):
                     field_pairs.append((left_field, right_field))
 
             if not field_pairs:
-                QMessageBox.warning(self, "提示", "请配置至少一组匹配字段")
+                QMessageBox.warning(self, "提示", "请配置至少一组匹配字�?)
                 return
 
             self.progress_bar.setValue(0)
@@ -1047,7 +1047,7 @@ class MatchDialog(QDialog):
                     results.extend(engine.fuzzy_match(
                         self.left_data, self.right_data, left_field, right_field
                     ))
-            elif match_type == '多字段组合匹配':
+            elif match_type == '多字段组合匹�?:
                 results = engine.multi_field_match(
                     self.left_data, self.right_data, field_pairs
                 )
@@ -1065,17 +1065,17 @@ class MatchDialog(QDialog):
             self.match_completed.emit(results)
 
             self.progress_bar.setValue(100)
-            QMessageBox.information(self, "成功", f"匹配完成！共匹配 {len(results)} 条记录")
+            QMessageBox.information(self, "成功", f"匹配完成！共匹配 {len(results)} 条记�?)
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"匹配失败: {e}\n{traceback.format_exc()}")
             self.progress_bar.setValue(0)
 
     def _display_results(self, results: List[Dict]):
-        """在结果表中显示匹配结果"""
+        """在结果表中显示匹配结�?""
         self.result_table.setRowCount(0)
 
-        for result in results[:100]:  # 显示前 100 条
+        for result in results[:100]:  # 显示�?100 �?
             row_idx = self.result_table.rowCount()
             self.result_table.insertRow(row_idx)
 
@@ -1084,7 +1084,7 @@ class MatchDialog(QDialog):
             match_type = result.get('match_type', 'unknown')
             confidence = result.get('confidence', 0)
 
-            # 获取 ID（假设有 ID 字段）
+            # 获取 ID（假设有 ID 字段�?
             left_id = str(left_row.get('id', ''))[:20]
             right_id = str(right_row.get('id', ''))[:20]
 
@@ -1102,13 +1102,13 @@ class MatchDialog(QDialog):
         accuracy = (matched / total * 100) if total > 0 else 0
 
         self.stat_total.setText(f"总记录数: {total}")
-        self.stat_matched.setText(f"匹配数: {matched}")
+        self.stat_matched.setText(f"匹配�? {matched}")
         self.stat_unmatched.setText(f"未匹配数: {unmatched}")
-        self.stat_accuracy.setText(f"匹配率: {accuracy:.1f}%")
+        self.stat_accuracy.setText(f"匹配�? {accuracy:.1f}%")
 
     # ------------------- Home tab helpers -------------------
     def _home_select_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件", "", "所有支持格式 (*.csv *.xlsx *.xls *.shp *.geojson)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件", "", "所有支持格�?(*.csv *.xlsx *.xls *.shp *.geojson)")
         if not file_path:
             return
         self.home_file_label.setText(file_path)
@@ -1127,7 +1127,7 @@ class MatchDialog(QDialog):
     def _home_run_clean(self):
         # Placeholder cleaning: trim strings and remove empty rows
         if not self.left_data:
-            QMessageBox.warning(self, '提示', '请先选择文件并加载数据')
+            QMessageBox.warning(self, '提示', '请先选择文件并加载数�?)
             return
         self.clean_progress.setValue(10)
         cleaned = []
@@ -1148,16 +1148,16 @@ class MatchDialog(QDialog):
         self.clean_progress.setValue(100)
 
     def _home_run_standardize(self):
-        # Simple standardization demo: normalize '北京' vs '北京市'
+        # Simple standardization demo: normalize '北京' vs '北京�?
         if not self.left_data:
             QMessageBox.warning(self, '提示', '请先加载数据')
             return
         field = self.std_field_combo.currentText()
         if not field:
-            QMessageBox.warning(self, '提示', '请选择要标准化的字段')
+            QMessageBox.warning(self, '提示', '请选择要标准化的字�?)
             return
         self.std_progress.setValue(10)
-        mapping = {'北京市': '北京', '上海市': '上海'}
+        mapping = {'北京�?: '北京', '上海�?: '上海'}
         for row in self.left_data:
             val = row.get(field)
             if isinstance(val, str) and val in mapping:
@@ -1174,7 +1174,7 @@ class MatchDialog(QDialog):
 
     def _home_run_infer_relations(self):
         if not self.left_data or not self.right_data:
-            QMessageBox.warning(self, '提示', '请先加载两个数据文件以推断字段关系')
+            QMessageBox.warning(self, '提示', '请先加载两个数据文件以推断字段关�?)
             return
         try:
             from ..core.field_detector import FieldDetector
@@ -1237,7 +1237,7 @@ class MatchDialog(QDialog):
             from ..utils.cache import load_cache
             data = load_cache(name if name else 'cleaned_left')
             if not data:
-                QMessageBox.information(self, '提示', '未找到缓存')
+                QMessageBox.information(self, '提示', '未找到缓�?)
                 return
             # show a quick preview
             self._preview_data(self.left_preview, data)
@@ -1307,7 +1307,7 @@ class MatchDialog(QDialog):
         """导出匹配结果"""
         try:
             if self.result_table.rowCount() == 0:
-                QMessageBox.warning(self, "提示", "没有匹配结果可导出")
+                QMessageBox.warning(self, "提示", "没有匹配结果可导�?)
                 return
 
             file_path, _ = QFileDialog.getSaveFileName(

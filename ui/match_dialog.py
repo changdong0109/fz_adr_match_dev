@@ -177,10 +177,14 @@ class MatchDialog(QDialog):
         console_group.setLayout(console_layout)
         layout.addWidget(console_group)
 
+        # make groupboxes visually consistent
+        console_group.setStyleSheet('QGroupBox { font-weight: bold; margin-top: 6px; } QGroupBox::title { subcontrol-origin: margin; left: 6px; padding: 0 3px 0 3px; }')
+
         # Section 1: 数据清洗（上传 + 清洗 + 缓存）
         clean_group = QGroupBox("1. 数据上传与清洗")
         clean_group.setCheckable(True)
         clean_group.setChecked(True)
+        clean_group.setStyleSheet('QGroupBox { font-weight: bold; }')
         clean_layout = QVBoxLayout()
 
         upload_layout = QHBoxLayout()
@@ -208,10 +212,14 @@ class MatchDialog(QDialog):
         clean_group.setLayout(clean_layout)
         layout.addWidget(clean_group)
 
+        # connect toggled for collapse/expand
+        clean_group.toggled.connect(lambda checked, g=clean_group: self._toggle_group_visibility(g, checked))
+
         # Section 2: 地址标准化
         std_group = QGroupBox("2. 地址标准化")
         std_group.setCheckable(True)
         std_group.setChecked(False)
+        std_group.setStyleSheet('QGroupBox { font-weight: bold; }')
         std_layout = QVBoxLayout()
 
         std_layout.addWidget(QLabel("选择要标准化的字段（可多选）："))
@@ -232,11 +240,13 @@ class MatchDialog(QDialog):
 
         std_group.setLayout(std_layout)
         layout.addWidget(std_group)
+        std_group.toggled.connect(lambda checked, g=std_group: self._toggle_group_visibility(g, checked))
 
         # Section 3: 智能字段匹配（演示与案例）
         matchrel_group = QGroupBox("3. 智能字段匹配关系（示例）")
         matchrel_group.setCheckable(True)
         matchrel_group.setChecked(False)
+        matchrel_group.setStyleSheet('QGroupBox { font-weight: bold; }')
         matchrel_layout = QVBoxLayout()
 
         btn_rel_run = QPushButton("检测字段关系")
@@ -250,11 +260,13 @@ class MatchDialog(QDialog):
 
         matchrel_group.setLayout(matchrel_layout)
         layout.addWidget(matchrel_group)
+        matchrel_group.toggled.connect(lambda checked, g=matchrel_group: self._toggle_group_visibility(g, checked))
 
         # Section 4: 匹配结果方式配置与导出
         res_group = QGroupBox("4. 匹配结果与导出")
         res_group.setCheckable(True)
         res_group.setChecked(False)
+        res_group.setStyleSheet('QGroupBox { font-weight: bold; }')
         res_layout = QVBoxLayout()
 
         btn_res_run = QPushButton("执行匹配(快速示例)")
@@ -267,17 +279,20 @@ class MatchDialog(QDialog):
 
         res_group.setLayout(res_layout)
         layout.addWidget(res_group)
+        res_group.toggled.connect(lambda checked, g=res_group: self._toggle_group_visibility(g, checked))
 
         # Section 5: 地图可视化（打开地图并高亮）
         vis_group = QGroupBox("5. 地图可视化")
         vis_group.setCheckable(True)
         vis_group.setChecked(False)
+        vis_group.setStyleSheet('QGroupBox { font-weight: bold; }')
         vis_layout = QVBoxLayout()
         btn_vis = QPushButton("在地图上显示匹配关系")
         btn_vis.clicked.connect(lambda: self._home_show_on_map())
         vis_layout.addWidget(btn_vis)
         vis_group.setLayout(vis_layout)
         layout.addWidget(vis_group)
+        vis_group.toggled.connect(lambda checked, g=vis_group: self._toggle_group_visibility(g, checked))
 
         # Spacer
         layout.addStretch()
@@ -720,6 +735,41 @@ class MatchDialog(QDialog):
         self.console_log.insertRow(r)
         self.console_log.setItem(r, 0, QTableWidgetItem(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         self.console_log.setItem(r, 1, QTableWidgetItem(f'[{level}] {msg}'))
+        try:
+            # auto-scroll to latest
+            self.console_log.scrollToBottom()
+        except Exception:
+            pass
+
+    def _toggle_group_visibility(self, group: QGroupBox, checked: bool):
+        """Show/hide the contents of a checkable QGroupBox when toggled.
+
+        This avoids relying on QFormLayout.FieldRole and provides a simple
+        collapsible behavior: when unchecked, hide all child widgets in the
+        group's layout; when checked, show them.
+        """
+        try:
+            layout = group.layout()
+            if layout is None:
+                return
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item is None:
+                    continue
+                widget = item.widget()
+                if widget is not None:
+                    # keep the title visible (QGroupBox handles title), hide/show children
+                    widget.setVisible(checked)
+                else:
+                    # if the item is a layout itself, iterate its widgets
+                    child_layout = item.layout()
+                    if child_layout:
+                        for j in range(child_layout.count()):
+                            w = child_layout.itemAt(j).widget()
+                            if w:
+                                w.setVisible(checked)
+        except Exception:
+            pass
 
     def export_results(self):
         """导出匹配结果"""

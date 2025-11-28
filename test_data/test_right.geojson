@@ -1,0 +1,81 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "record_id": "EX001",
+        "address_province": "北京",
+        "address_city": "北京",
+        "address_district": "朝阳",
+        "address_street": "建国路",
+        "address_number": "1",
+        "company": "天然气公司"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "record_id": "EX002",
+        "address_province": "北京",
+        "address_city": "北京",
+        "address_district": "朝阳",
+        "address_street": "建国路",
+        "address_number": "5号",
+        "company": "自来水公司"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "record_id": "EX003",
+        "address_province": "北京",
+        "address_city": "北京市",
+        "address_district": "朝阳区",
+        "address_street": "东三环中路",
+        "address_number": "2",
+        "company": "污水处理公司"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "record_id": "EX004",
+        "address_province": "上海",
+        "address_city": "上海",
+        "address_district": "浦东新区",
+        "address_street": "浦东大道",
+        "address_number": "100号",
+        "company": "供水公司"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

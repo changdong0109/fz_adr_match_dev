@@ -13,6 +13,16 @@ except ImportError as import_error:
     QGIS_IMPORT_ERROR = import_error
 
 
+def load_match_dialog():
+    """动态加载匹配对话框（处理导入错误）"""
+    try:
+        from .ui.match_dialog import MatchDialog
+        return MatchDialog
+    except Exception as e:
+        print(f"Failed to load MatchDialog: {e}")
+        return None
+
+
 class FzAdrMatchPlugin:
     """QGIS 地址标准化匹配插件"""
 
@@ -27,6 +37,7 @@ class FzAdrMatchPlugin:
         self.actions = []
         self.menu_name = "地址标准化匹配"
         self.plugin_dir = os.path.dirname(__file__)
+        self.match_dialog = None
 
         print(f"fz_adr_match_dev: 插件实例已创建")
 
@@ -67,10 +78,26 @@ class FzAdrMatchPlugin:
     def run(self):
         """运行插件主功能"""
         try:
-            QMessageBox.information(
-                self.iface.mainWindow(),
-                "地址标准化匹配",
-                "插件功能正常！\n\n后续可在此接入地址标准化和管网匹配功能。"
-            )
+            # 加载匹配对话框
+            MatchDialogClass = load_match_dialog()
+            
+            if MatchDialogClass is None:
+                QMessageBox.critical(
+                    self.iface.mainWindow(),
+                    "错误",
+                    "无法加载匹配对话框，请检查模块导入"
+                )
+                return
+            
+            # 创建并显示对话框
+            self.match_dialog = MatchDialogClass(self.iface.mainWindow())
+            self.match_dialog.show()
+            
         except Exception as e:
             print(f"fz_adr_match_dev: 执行功能时出错: {e}")
+            traceback.print_exc()
+            QMessageBox.critical(
+                self.iface.mainWindow(),
+                "错误",
+                f"执行失败: {e}"
+            )

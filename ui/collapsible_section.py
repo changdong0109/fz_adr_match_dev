@@ -45,9 +45,11 @@ class CollapsibleSection(QTreeWidget):
         self.setHeaderHidden(True)
         self.setRootIsDecorated(True)
         self.setAnimated(True)
-        self.setIndentation(0)
+        # 保持有缩进（非 0），以便平台能正确显示展开/折叠指示器
+        self.setIndentation(12)
         
         # 隐藏滚动条和边框以获得更清洁的外观
+        # 基本样式；保留平台原生的 branch 指示器（箭头/加号）
         self.setStyleSheet("""
             QTreeWidget {
                 border: none;
@@ -60,6 +62,9 @@ class CollapsibleSection(QTreeWidget):
             QTreeWidget::item:hover {
                 background-color: #f5f5f5;
             }
+            /* 如果需要可以通过下面规则定制展开/折叠图标 */
+            QTreeView::branch:closed:has-children { image: none; }
+            QTreeView::branch:open:has-children { image: none; }
         """)
         
         # 创建根项（标题）

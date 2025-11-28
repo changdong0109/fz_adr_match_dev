@@ -23,6 +23,18 @@ except ImportError:
     QGIS_AVAILABLE = False
 
 
+# Qt.ItemIsSelectable 兼容性处理
+try:
+    ITEM_IS_SELECTABLE = Qt.ItemIsSelectable
+except AttributeError:
+    # 如果不存在，使用 QTreeWidgetItem 中的枚举
+    try:
+        ITEM_IS_SELECTABLE = QTreeWidgetItem.ItemIsSelectable
+    except AttributeError:
+        # 最后回退到数值 1（通常是 ItemIsSelectable 的值）
+        ITEM_IS_SELECTABLE = 1
+
+
 class CollapsibleSection(QTreeWidget):
     """
     可折叠的部分容器 - 基于 QTreeWidget 的专业实现
@@ -72,7 +84,7 @@ class CollapsibleSection(QTreeWidget):
         self.container_item.setText(0, "")
         
         # 禁用容器项的交互（不能折叠）
-        self.container_item.setFlags(self.container_item.flags() & ~Qt.ItemIsSelectable)
+        self.container_item.setFlags(self.container_item.flags() & ~ITEM_IS_SELECTABLE)
         
         # 存储用户添加的 widget
         self._user_widget = None

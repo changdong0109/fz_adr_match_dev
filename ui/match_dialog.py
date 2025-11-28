@@ -3,6 +3,8 @@
 
 此文件已精简：仅保留 `主页` 标签，主页包含文件上传、预览、清洗、标准化、字段推断、快速匹配、导出与日志。
 后续若需扩展其它页面再拆分模块。
+
+样式管理已分离到 styles.py 和 styles.qss，保持代码与视觉的解耦。
 """
 
 from typing import List, Dict, Optional
@@ -20,6 +22,9 @@ try:
     QGIS_AVAILABLE = True
 except ImportError:
     QGIS_AVAILABLE = False
+
+# 导入样式管理模块
+from .styles import get_collapsible_groupbox_style
 
 # Compatibility: obtain enum-like values accepted by QGIS PyQt bindings.
 # Some bindings require the enum attribute (e.g. QAbstractItemView.NoEditTriggers),
@@ -61,37 +66,6 @@ except Exception:
         except Exception:
             HEADER_RESIZE_TO_CONTENTS = 1
             HEADER_RESIZE_STRETCH = 2
-
-# Collapsible GroupBox style: arrow indicator instead of checkbox
-COLLAPSIBLE_GROUPBOX_STYLE = """
-QGroupBox {
-    border: 1px solid #cccccc;
-    border-radius: 4px;
-    margin-top: 8px;
-    padding-top: 8px;
-    font-weight: bold;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 3px 0 3px;
-}
-QGroupBox::indicator {
-    width: 18px;
-    height: 18px;
-    margin-left: 4px;
-}
-QGroupBox::indicator:checked {
-    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNNyAxMEwxMSAxNEwxNyA4IiBzdHJva2U9IiMzMzMzMzMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+);
-    background-repeat: no-repeat;
-    background-position: center;
-}
-QGroupBox::indicator:unchecked {
-    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCA1TDEzIDEwTDggMTUiIHN0cm9rZT0iIzMzMzMzMyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=);
-    background-repeat: no-repeat;
-    background-position: center;
-}
-"""
 
 class MatchDialog(QDialog):
     """精简的地址匹配对话框，仅保留主页功能"""
@@ -160,7 +134,7 @@ class MatchDialog(QDialog):
         clean_group = QGroupBox("1. 数据上传与清洗（左表/右表）")
         clean_group.setCheckable(True)
         clean_group.setChecked(True)
-        clean_group.setStyleSheet(COLLAPSIBLE_GROUPBOX_STYLE)
+        clean_group.setStyleSheet(get_collapsible_groupbox_style())
         clean_content = QWidget()
         cg_layout = QVBoxLayout(clean_content)
         cg_layout.setContentsMargins(0, 0, 0, 0)
@@ -212,7 +186,7 @@ class MatchDialog(QDialog):
         std_group = QGroupBox("2. 地址标准化")
         std_group.setCheckable(True)
         std_group.setChecked(False)
-        std_group.setStyleSheet(COLLAPSIBLE_GROUPBOX_STYLE)
+        std_group.setStyleSheet(get_collapsible_groupbox_style())
         std_content = QWidget()
         sg_layout = QVBoxLayout(std_content)
         sg_layout.setContentsMargins(0, 0, 0, 0)
@@ -242,7 +216,7 @@ class MatchDialog(QDialog):
         rel_group = QGroupBox("3. 智能字段匹配关系（示例）")
         rel_group.setCheckable(True)
         rel_group.setChecked(False)
-        rel_group.setStyleSheet(COLLAPSIBLE_GROUPBOX_STYLE)
+        rel_group.setStyleSheet(get_collapsible_groupbox_style())
         rel_content = QWidget()
         rl_layout = QVBoxLayout(rel_content)
         rl_layout.setContentsMargins(0, 0, 0, 0)
@@ -265,7 +239,7 @@ class MatchDialog(QDialog):
         res_group = QGroupBox("4. 匹配与导出")
         res_group.setCheckable(True)
         res_group.setChecked(True)
-        res_group.setStyleSheet(COLLAPSIBLE_GROUPBOX_STYLE)
+        res_group.setStyleSheet(get_collapsible_groupbox_style())
         res_content = QWidget()
         rg_layout = QVBoxLayout(res_content)
         rg_layout.setContentsMargins(0, 0, 0, 0)

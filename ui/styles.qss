@@ -1,0 +1,47 @@
+/* ============================================================
+   QSS Stylesheet for fz_adr_match plugin
+   地址匹配插件的主样式表
+   ============================================================ */
+
+/* Collapsible GroupBox with arrow indicators */
+QGroupBox {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+    font-weight: bold;
+    color: #333333;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 3px 0 3px;
+}
+
+/* Arrow indicator (down when checked, right when unchecked) */
+QGroupBox::indicator {
+    width: 18px;
+    height: 18px;
+    margin-left: 4px;
+}
+
+/* Down arrow when section is expanded (checked) */
+QGroupBox::indicator:checked {
+    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNNyAxMEwxMSAxNEwxNyA4IiBzdHJva2U9IiMzMzMzMzMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+);
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* Right arrow when section is collapsed (unchecked) */
+QGroupBox::indicator:unchecked {
+    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCA1TDEzIDEwTDggMTUiIHN0cm9rZT0iIzMzMzMzMyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=);
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+/* Hover effect for better UX */
+QGroupBox::indicator:hover {
+    background-color: #f0f0f0;
+    border-radius: 3px;
+}

@@ -263,6 +263,19 @@ class MatchDialog(QDialog):
         opt_layout.addStretch()
         rg_layout.addLayout(opt_layout)
 
+        # Field selectors for matching (populated after loading files)
+        field_sel_layout = QHBoxLayout()
+        self.left_field_combo = QComboBox()
+        self.left_field_combo.setToolTip('选择左表用于匹配的字段')
+        self.right_field_combo = QComboBox()
+        self.right_field_combo.setToolTip('选择右表用于匹配的字段')
+        field_sel_layout.addWidget(QLabel('左表字段:'))
+        field_sel_layout.addWidget(self.left_field_combo)
+        field_sel_layout.addWidget(QLabel('右表字段:'))
+        field_sel_layout.addWidget(self.right_field_combo)
+        field_sel_layout.addStretch()
+        rg_layout.addLayout(field_sel_layout)
+
         match_btn_layout = QHBoxLayout()
         self.btn_run_match = QPushButton("开始匹配")
         self.btn_run_match.clicked.connect(self._home_run_match)
@@ -306,11 +319,17 @@ class MatchDialog(QDialog):
             self.left_data = data
             self.left_file = file_path
             self._preview_data(self.left_preview, data)
-            # populate std combo
+            # populate std combo and left match-field combo
             try:
                 fields = list(self.left_data[0].keys())
                 self.std_field_combo.clear()
                 self.std_field_combo.addItems(fields)
+                # populate left match field combo
+                try:
+                    self.left_field_combo.clear()
+                    self.left_field_combo.addItems(fields)
+                except Exception:
+                    pass
             except Exception:
                 pass
             self._log('INFO', f'Loaded file into left: {file_path}')
@@ -332,6 +351,13 @@ class MatchDialog(QDialog):
             self.right_file = file_path
             self._preview_data(self.right_preview, data)
             self._log('INFO', f'Loaded file into right: {file_path}')
+            # populate right match-field combo
+            try:
+                fields = list(self.right_data[0].keys())
+                self.right_field_combo.clear()
+                self.right_field_combo.addItems(fields)
+            except Exception:
+                pass
         except Exception as e:
             self._log('ERROR', f'Load failed (right): {e}')
         finally:
@@ -419,14 +445,25 @@ class MatchDialog(QDialog):
         engine = MatchEngine(fuzzy_threshold=self.fuzzy_threshold.value())
 
         match_type = self.match_type.currentText()
-        if match_type == '精准匹配':
-            # quick demo: match by first field
+        # determine fields from selectors if provided
+        try:
+            lf = self.left_field_combo.currentText() if hasattr(self, 'left_field_combo') else ''
+        except Exception:
+            lf = ''
+        try:
+            rf = self.right_field_combo.currentText() if hasattr(self, 'right_field_combo') else ''
+        except Exception:
+            rf = ''
+
+        # fallback to first keys if combos are empty
+        if not lf:
             lf = list(self.left_data[0].keys())[0]
+        if not rf:
             rf = list(self.right_data[0].keys())[0]
+
+        if match_type == '精准匹配':
             results = engine.exact_match(self.left_data, self.right_data, lf, rf)
         else:
-            lf = list(self.left_data[0].keys())[0]
-            rf = list(self.right_data[0].keys())[0]
             results = engine.fuzzy_match(self.left_data, self.right_data, lf, rf)
 
         # display limited results in home result_table

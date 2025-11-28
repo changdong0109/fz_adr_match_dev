@@ -7,7 +7,7 @@ import traceback
 
 try:
     from qgis.PyQt.QtWidgets import (
-        QDialog, QVBoxLayout, QHBoxLayout, QTabWidget,
+        QDialog, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
         QPushButton, QLabel, QFileDialog, QTableWidget, QTableWidgetItem,
         QComboBox, QSpinBox, QDoubleSpinBox, QMessageBox, QProgressBar,
         QLineEdit, QGroupBox, QFormLayout, QCheckBox
@@ -143,10 +143,16 @@ class MatchDialog(QDialog):
             left_combo = QComboBox()
             right_combo = QComboBox()
             self.field_config.append((left_combo, right_combo))
-            config_layout.addRow(f"匹配字段组 {i + 1}", QHBoxLayout())
-            config_layout.itemAt(config_layout.rowCount() - 1, QFormLayout.FieldRole).addWidget(left_combo)
-            config_layout.itemAt(config_layout.rowCount() - 1, QFormLayout.FieldRole).addWidget(QLabel("→"))
-            config_layout.itemAt(config_layout.rowCount() - 1, QFormLayout.FieldRole).addWidget(right_combo)
+
+            # 创建一个 QWidget 容器，将左右下拉框放入其中，然后作为字段添加到 QFormLayout
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.addWidget(left_combo)
+            row_layout.addWidget(QLabel("→"))
+            row_layout.addWidget(right_combo)
+
+            config_layout.addRow(f"匹配字段组 {i + 1}", row_widget)
 
         config_group.setLayout(config_layout)
         layout.addWidget(config_group)

@@ -85,7 +85,17 @@ class CollapsibleSection(QWidget):
                 self._toggle_btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
         except Exception:
             pass
-        self._toggle_btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        # Arrow indicator: some Qt bindings may not expose DownArrow/RightArrow.
+        # Fallback to text arrows if arrow constants are missing.
+        if hasattr(Qt, 'DownArrow') and hasattr(Qt, 'RightArrow'):
+            try:
+                self._toggle_btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+            except Exception:
+                # fallback to text arrows
+                self._toggle_btn.setText('▾' if expanded else '▸')
+        else:
+            self._toggle_btn.setText('▾' if expanded else '▸')
+
         self._toggle_btn.setCheckable(True)
         self._toggle_btn.setChecked(expanded)
         self._toggle_btn.setAutoRaise(True)
@@ -148,11 +158,20 @@ class CollapsibleSection(QWidget):
 
     def _on_toggled(self, checked: bool):
         # update arrow and content visibility
+        # Update arrow type if available, otherwise update button text.
         try:
-            self._toggle_btn.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-            self._content.setVisible(checked)
+            if hasattr(Qt, 'DownArrow') and hasattr(Qt, 'RightArrow'):
+                try:
+                    self._toggle_btn.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+                except Exception:
+                    # If setArrowType fails, fall back to text
+                    self._toggle_btn.setText('▾' if checked else '▸')
+            else:
+                self._toggle_btn.setText('▾' if checked else '▸')
         except Exception:
             pass
+        finally:
+            self._content.setVisible(checked)
 
     def set_expanded(self, expanded: bool):
         self._toggle_btn.setChecked(expanded)

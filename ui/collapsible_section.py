@@ -1,21 +1,22 @@
 """
-可折叠部分组件 - 基于 QTreeWidget 的专业折叠实现
+CollapsibleSection - header + content collapsible widget
 
-使用 QTreeWidget 提供原生的展开/折叠交互：
-  - 三角形箭头指示器（自动方向切换）
-  - 无需复选框，更专业
-  - 平滑的交互体验
-  - 轻量级，性能好
+Provides a clear, clickable header with an arrow indicator and a content
+area that can be shown/hidden. The whole section is wrapped in a
+`QFrame` to give a visible module boundary.
 
-使用示例：
-    section = CollapsibleSection("部分标题")
-    section.add_widget(your_widget)
+Usage:
+    section = CollapsibleSection("Title", expanded=True)
+    section.add_content_widget(widget)
     layout.addWidget(section)
+
+This implementation avoids platform-dependent tree indicators and
+provides a predictable, interactive UI.
 """
 
 try:
     from qgis.PyQt.QtWidgets import (
-        QTreeWidget, QTreeWidgetItem, QWidget, QVBoxLayout, QHeaderView
+        QWidget, QVBoxLayout, QHBoxLayout, QToolButton, QLabel, QFrame, QSizePolicy
     )
     from qgis.PyQt.QtCore import Qt
     QGIS_AVAILABLE = True
@@ -23,115 +24,114 @@ except ImportError:
     QGIS_AVAILABLE = False
 
 
-class CollapsibleSection(QTreeWidget):
-    """
-    可折叠的部分容器 - 基于 QTreeWidget 的专业实现
-    
-    提供一个单一的折叠项，用户点击三角形箭头即可展开/折叠。
-    内部通过 add_widget() 添加的 widget 会显示在树项下方。
-    """
+class CollapsibleSection(QWidget):
+    """A simple collapsible section with a header and content area."""
 
     def __init__(self, title: str, expanded: bool = True, parent=None):
-        """
-        初始化可折叠部分
-        
-        Args:
-            title: 部分的标题文本
-            expanded: 初始是否展开（默认展开）
-            parent: 父 widget
-        """
         super().__init__(parent)
-        self.setColumnCount(1)
-        self.setHeaderHidden(True)
-        self.setRootIsDecorated(True)
-        self.setAnimated(True)
-        # 保持有缩进（非 0），以便平台能正确显示展开/折叠指示器
-        self.setIndentation(12)
-        
-        # 隐藏滚动条和边框以获得更清洁的外观
-        # 基本样式；保留平台原生的 branch 指示器（箭头/加号）
-        self.setStyleSheet("""
-            QTreeWidget {
-                border: none;
-                background-color: transparent;
-            }
-            QTreeWidget::item {
-                padding: 4px;
-                border: none;
-            }
-            QTreeWidget::item:hover {
-                background-color: #f5f5f5;
-            }
-            /* 如果需要可以通过下面规则定制展开/折叠图标 */
-            QTreeView::branch:closed:has-children { image: none; }
-            QTreeView::branch:open:has-children { image: none; }
-        """)
-        
-        # 创建根项（标题）
-        self.root_item = QTreeWidgetItem(self)
-        self.root_item.setText(0, title)
-        self.root_item.setExpanded(expanded)
-        
-        # 创建容器项 - 用来放置用户的 widget
-        self.container_item = QTreeWidgetItem(self.root_item)
-        self.container_item.setText(0, "")
-        # 注意：container_item 本身是不可见的，因为我们用 setItemWidget 来显示内容
-        
-        # 存储用户添加的 widget
-        self._user_widget = None
+
+        # Outer frame to provide visual boundary between modules
+        self._frame = QFrame(self)
+        self._frame.setFrameShape(QFrame.StyledPanel)
+        self._frame.setFrameShadow(QFrame.Plain)
+        self._frame.setObjectName('collapsible_section_frame')
+
+        # Main layout for this widget
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(self._frame)
+
+        # Layout inside the frame
+        frame_layout = QVBoxLayout(self._frame)
+        frame_layout.setContentsMargins(6, 6, 6, 6)
+        frame_layout.setSpacing(6)
+
+        # Header: arrow button + title label
+        header = QWidget(self._frame)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
+
+        self._toggle_btn = QToolButton(header)
+        self._toggle_btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        self._toggle_btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self._toggle_btn.setCheckable(True)
+        self._toggle_btn.setChecked(expanded)
+        self._toggle_btn.setAutoRaise(True)
+        self._toggle_btn.setCursor(Qt.PointingHandCursor)
+
+        self._title_label = QLabel(title, header)
+        self._title_label.setObjectName('collapsible_section_title')
+        self._title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        header_layout.addWidget(self._toggle_btn)
+        header_layout.addWidget(self._title_label)
+        header_layout.addStretch()
+
+        frame_layout.addWidget(header)
+
+        # Content container
+        self._content = QWidget(self._frame)
+        self._content_layout = QVBoxLayout(self._content)
+        self._content_layout.setContentsMargins(0, 0, 0, 0)
+        self._content_layout.setSpacing(6)
+
+        frame_layout.addWidget(self._content)
+
+        # Connect toggle
+        self._toggle_btn.toggled.connect(self._on_toggled)
+
+        # Set initial state
+        self._content.setVisible(expanded)
+
+        # Basic style - keeps a subtle separation
+        self._apply_default_style()
+
+    def _apply_default_style(self):
+        # Keep styling minimal so it blends with QGIS native look,
+        # but ensure there is a visible boundary for each section.
+        style = """
+        QFrame#collapsible_section_frame { 
+            border: 1px solid #d0d0d0; 
+            border-radius: 4px; 
+            background: #fafafa; 
+        }
+        QLabel#collapsible_section_title { 
+            font-weight: bold; 
+        }
+        """
+        try:
+            self.setStyleSheet(style)
+        except Exception:
+            pass
 
     def add_widget(self, widget: QWidget):
-        """
-        向可折叠部分添加 widget
-        
-        Args:
-            widget: 要添加的 QWidget
-        """
-        self._user_widget = widget
-        # 使用 setItemWidget 将 widget 绑定到容器项
-        self.setItemWidget(self.container_item, 0, widget)
+        """Add a widget to the content area."""
+        # remove parent so layout takes ownership
+        widget.setParent(self._content)
+        self._content_layout.addWidget(widget)
 
     def add_content_widget(self, widget: QWidget):
-        """
-        向可折叠部分添加内容 widget（add_widget 的别名）
-        
-        Args:
-            widget: 要添加的 QWidget
-        """
+        """Alias for add_widget (keeps previous API)."""
         self.add_widget(widget)
 
+    def _on_toggled(self, checked: bool):
+        # update arrow and content visibility
+        try:
+            self._toggle_btn.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+            self._content.setVisible(checked)
+        except Exception:
+            pass
+
     def set_expanded(self, expanded: bool):
-        """
-        设置展开/折叠状态
-        
-        Args:
-            expanded: True 为展开，False 为折叠
-        """
-        self.root_item.setExpanded(expanded)
+        self._toggle_btn.setChecked(expanded)
+        self._content.setVisible(expanded)
 
     def is_expanded(self) -> bool:
-        """
-        获取当前展开状态
-        
-        Returns:
-            bool: True 表示已展开，False 表示已折叠
-        """
-        return self.root_item.isExpanded()
+        return self._toggle_btn.isChecked()
 
     def set_title(self, title: str):
-        """
-        设置部分标题
-        
-        Args:
-            title: 新标题文本
-        """
-        self.root_item.setText(0, title)
+        self._title_label.setText(title)
 
     def get_title(self) -> str:
-        """
-        获取部分标题
-        
-        Returns:
-            str: 当前标题
-        """
-        return self.root_item.text(0)
+        return self._title_label.text()

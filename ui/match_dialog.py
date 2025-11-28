@@ -46,6 +46,22 @@ except Exception:
         except Exception:
             SELECT_ROWS = 1
 
+# Header resize mode compatibility
+try:
+    HEADER_RESIZE_TO_CONTENTS = QHeaderView.ResizeToContents
+    HEADER_RESIZE_STRETCH = QHeaderView.Stretch
+except Exception:
+    try:
+        HEADER_RESIZE_TO_CONTENTS = QHeaderView.ResizeMode.ResizeToContents
+        HEADER_RESIZE_STRETCH = QHeaderView.ResizeMode.Stretch
+    except Exception:
+        try:
+            HEADER_RESIZE_TO_CONTENTS = QHeaderView.ResizeMode(1)
+            HEADER_RESIZE_STRETCH = QHeaderView.ResizeMode(2)
+        except Exception:
+            HEADER_RESIZE_TO_CONTENTS = 1
+            HEADER_RESIZE_STRETCH = 2
+
 class MatchDialog(QDialog):
     """精简的地址匹配对话框，仅保留主页功能"""
 
@@ -91,9 +107,9 @@ class MatchDialog(QDialog):
         self.console_log.setSelectionBehavior(SELECT_ROWS)
         self.console_log.setWordWrap(True)
         self.console_log.verticalHeader().setVisible(False)
-        self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.console_log.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.console_log.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.console_log.horizontalHeader().setSectionResizeMode(0, HEADER_RESIZE_TO_CONTENTS)
+        self.console_log.horizontalHeader().setSectionResizeMode(1, HEADER_RESIZE_TO_CONTENTS)
+        self.console_log.horizontalHeader().setSectionResizeMode(2, HEADER_RESIZE_STRETCH)
         console_layout.addWidget(self.console_log)
 
         # console control buttons

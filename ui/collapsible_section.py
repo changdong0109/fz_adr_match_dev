@@ -78,7 +78,13 @@ class CollapsibleSection(QWidget):
         header_layout.setSpacing(6)
 
         self._toggle_btn = QToolButton(header)
-        self._toggle_btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        # Some Qt bindings used by QGIS may not expose ToolButtonIconOnly.
+        # Guard the call to avoid AttributeError; if unavailable, skip it.
+        try:
+            if hasattr(Qt, 'ToolButtonIconOnly'):
+                self._toggle_btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        except Exception:
+            pass
         self._toggle_btn.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
         self._toggle_btn.setCheckable(True)
         self._toggle_btn.setChecked(expanded)

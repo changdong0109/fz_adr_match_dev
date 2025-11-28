@@ -21,6 +21,30 @@ try:
 except ImportError:
     QGIS_AVAILABLE = False
 
+# Compatibility: obtain enum-like values accepted by QGIS PyQt bindings.
+# Some bindings require the enum attribute (e.g. QAbstractItemView.NoEditTriggers),
+# others require a specific enum type (e.g. QAbstractItemView.EditTriggers(0)).
+try:
+    EDIT_TRIGGERS_NONE = QAbstractItemView.NoEditTriggers
+except Exception:
+    try:
+        EDIT_TRIGGERS_NONE = QTableWidget.NoEditTriggers
+    except Exception:
+        try:
+            EDIT_TRIGGERS_NONE = QAbstractItemView.EditTriggers(0)
+        except Exception:
+            EDIT_TRIGGERS_NONE = 0
+
+try:
+    SELECT_ROWS = QAbstractItemView.SelectRows
+except Exception:
+    try:
+        SELECT_ROWS = QTableWidget.SelectRows
+    except Exception:
+        try:
+            SELECT_ROWS = QAbstractItemView.SelectionBehavior(1)
+        except Exception:
+            SELECT_ROWS = 1
 
 class MatchDialog(QDialog):
     """精简的地址匹配对话框，仅保留主页功能"""
@@ -62,10 +86,9 @@ class MatchDialog(QDialog):
         self.console_log.setColumnCount(3)
         self.console_log.setHorizontalHeaderLabels(['时间', '级别', '消息'])
         self.console_log.setMaximumHeight(200)
-        # Use numeric constant for NoEditTriggers (0 = no edit triggers allowed)
-        self.console_log.setEditTriggers(0)
-        # Use numeric constant for SelectRows (1 = select entire rows)
-        self.console_log.setSelectionBehavior(1)
+        # Use compatibility values for edit triggers and selection behavior
+        self.console_log.setEditTriggers(EDIT_TRIGGERS_NONE)
+        self.console_log.setSelectionBehavior(SELECT_ROWS)
         self.console_log.setWordWrap(True)
         self.console_log.verticalHeader().setVisible(False)
         self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)

@@ -21,16 +21,10 @@ try:
 except ImportError:
     QGIS_AVAILABLE = False
 
-# 兼容性封装：处理 PyQt 版本差异（某些 PyQt/PySide 绑定中 NoEditTriggers 属性位置不同）
-try:
-    EDIT_TRIGGERS_NONE = QAbstractItemView.NoEditTriggers
-except AttributeError:
-    # 备选方案：从 QTableWidget 读取
-    try:
-        EDIT_TRIGGERS_NONE = QTableWidget.NoEditTriggers
-    except AttributeError:
-        # 如果都找不到，使用数值常量（通常为 0）
-        EDIT_TRIGGERS_NONE = 0
+# PyQt 常量兼容性处理：直接使用数值常量以避免属性查找问题
+# NoEditTriggers = 0, SelectRows = 1, Stretch = 1, ResizeToContents = 1, ResizeMode.Stretch = 1
+EDIT_TRIGGERS_NONE = 0
+SELECTION_BEHAVIOR_ROWS = 1
 
 
 class MatchDialog(QDialog):
@@ -74,7 +68,7 @@ class MatchDialog(QDialog):
         self.console_log.setHorizontalHeaderLabels(['时间', '级别', '消息'])
         self.console_log.setMaximumHeight(200)
         self.console_log.setEditTriggers(EDIT_TRIGGERS_NONE)
-        self.console_log.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.console_log.setSelectionBehavior(SELECTION_BEHAVIOR_ROWS)
         self.console_log.setWordWrap(True)
         self.console_log.verticalHeader().setVisible(False)
         self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)

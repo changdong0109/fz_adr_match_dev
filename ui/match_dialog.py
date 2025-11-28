@@ -124,7 +124,6 @@ class MatchDialog(QDialog):
         console_layout.addLayout(cbtn_layout)
 
         console_group.setLayout(console_layout)
-        layout.addWidget(console_group)
 
         # Section: 数据上传与清洗 + 预览
         clean_group = QGroupBox("1. 数据上传与清洗（左表/右表）")
@@ -169,6 +168,7 @@ class MatchDialog(QDialog):
 
         clean_group.setLayout(cg_layout)
         layout.addWidget(clean_group)
+        clean_group.toggled.connect(lambda checked, g=clean_group: self._toggle_group_visibility(g, checked))
 
         # Section: 标准化
         std_group = QGroupBox("2. 地址标准化")
@@ -191,6 +191,7 @@ class MatchDialog(QDialog):
         sg_layout.addLayout(sbtn_layout)
         std_group.setLayout(sg_layout)
         layout.addWidget(std_group)
+        std_group.toggled.connect(lambda checked, g=std_group: self._toggle_group_visibility(g, checked))
 
         # Section: 字段推断（演示）
         rel_group = QGroupBox("3. 智能字段匹配关系（示例）")
@@ -206,6 +207,7 @@ class MatchDialog(QDialog):
         rl_layout.addWidget(self.rel_preview)
         rel_group.setLayout(rl_layout)
         layout.addWidget(rel_group)
+        rel_group.toggled.connect(lambda checked, g=rel_group: self._toggle_group_visibility(g, checked))
 
         # Section: 匹配与导出（主页唯一动作入口）
         res_group = QGroupBox("4. 匹配与导出")
@@ -245,12 +247,47 @@ class MatchDialog(QDialog):
 
         res_group.setLayout(rg_layout)
         layout.addWidget(res_group)
+        res_group.toggled.connect(lambda checked, g=res_group: self._toggle_group_visibility(g, checked))
+
+        # place the console/log group at the bottom for better UX
+        layout.addWidget(console_group)
 
         # Spacer
         layout.addStretch()
 
         tab.setLayout(layout)
         return tab
+
+    def _toggle_group_visibility(self, group: QGroupBox, checked: bool):
+        """Show or hide the children of a checkable QGroupBox while keeping the title visible."""
+        try:
+            # prefer a single content widget if attached
+            content = getattr(group, '_content_widget', None)
+            if content is not None:
+                content.setVisible(checked)
+                content.updateGeometry()
+                group.updateGeometry()
+                return
+
+            layout = group.layout()
+            if layout is None:
+                return
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item is None:
+                    continue
+                widget = item.widget()
+                if widget is not None:
+                    widget.setVisible(checked)
+                else:
+                    child_layout = item.layout()
+                    if child_layout:
+                        for j in range(child_layout.count()):
+                            w = child_layout.itemAt(j).widget()
+                            if w:
+                                w.setVisible(checked)
+        except Exception:
+            pass
 
     # ---------------- Home helpers ----------------
     def _home_select_file(self):

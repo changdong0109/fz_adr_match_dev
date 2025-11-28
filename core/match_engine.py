@@ -83,7 +83,8 @@ class MatchEngine:
         matches = []
 
         for left_row in left_data:
-            left_val = str(left_row.get(left_key, '')).strip()
+            # normalize to lower-case for case-insensitive fuzzy comparison
+            left_val = str(left_row.get(left_key, '')).strip().lower()
             if not left_val:
                 continue
 
@@ -91,11 +92,12 @@ class MatchEngine:
             best_score = 0.0
 
             for right_row in right_data:
-                right_val = str(right_row.get(right_key, '')).strip()
+                # normalize to lower-case for case-insensitive fuzzy comparison
+                right_val = str(right_row.get(right_key, '')).strip().lower()
                 if not right_val:
                     continue
 
-                # 计算相似度
+                # 计算相似度（使用已规范化的小写值）
                 score = self._similarity_score(left_val, right_val)
 
                 if score > best_score:
@@ -236,7 +238,14 @@ class MatchEngine:
 
             # 去重：如果左表记录已匹配，跳过
             for match in matches:
-                left_id = id(match['left'])
+                # 去重：优先使用记录内的稳定 id 字段（如 'id' 或 'record_id'），
+                # 若不存在则回退到对象 id() 作为临时标识。
+                left_obj = match.get('left')
+                left_id = None
+                if isinstance(left_obj, dict):
+                    left_id = left_obj.get('id') or left_obj.get('record_id')
+                if left_id is None:
+                    left_id = id(left_obj)
                 if left_id not in matched_left_ids:
                     all_matches.append(match)
                     matched_left_ids.add(left_id)

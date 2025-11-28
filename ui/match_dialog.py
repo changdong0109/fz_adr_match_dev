@@ -1,4 +1,415 @@
 """
+地址匹配 UI 对话框 - 精简版（仅保留主页）
+
+此文件已精简：仅保留 `主页` 标签，主页包含文件上传、预览、清洗、标准化、字段推断、快速匹配、导出与日志。
+后续若需扩展其它页面再拆分模块。
+"""
+
+from typing import List, Dict, Optional
+import traceback
+
+try:
+    from qgis.PyQt.QtWidgets import (
+        QDialog, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
+        QPushButton, QLabel, QFileDialog, QTableWidget, QTableWidgetItem,
+        QHeaderView, QAbstractItemView,
+        QComboBox, QDoubleSpinBox, QMessageBox, QProgressBar,
+        QLineEdit, QGroupBox
+    )
+    from qgis.PyQt.QtCore import Qt, pyqtSignal
+    QGIS_AVAILABLE = True
+except ImportError:
+    QGIS_AVAILABLE = False
+
+# 兼容性封装：处理 PyQt 版本差异（某些 PyQt/PySide 绑定中 NoEditTriggers 属性位置不同）
+try:
+    EDIT_TRIGGERS_NONE = QAbstractItemView.NoEditTriggers
+except AttributeError:
+    # 备选方案：从 QTableWidget 读取
+    try:
+        EDIT_TRIGGERS_NONE = QTableWidget.NoEditTriggers
+    except AttributeError:
+        # 如果都找不到，使用数值常量（通常为 0）
+        EDIT_TRIGGERS_NONE = 0
+
+
+class MatchDialog(QDialog):
+    """精简的地址匹配对话框，仅保留主页功能"""
+
+    match_completed = pyqtSignal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("地址标准化与管网匹配")
+        self.setGeometry(100, 100, 1000, 700)
+
+        # 数据存放
+        self.left_data = None
+        self.right_data = None
+        self.left_file = None
+        self.right_file = None
+
+        # 初始化 UI
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        tabs = QTabWidget()
+        tabs.addTab(self._create_home_tab(), "主页")
+        layout.addWidget(tabs)
+
+        # 只保留主页；底部按钮由主页内部控制（避免重复）
+        self.setLayout(layout)
+
+    def _create_home_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        # Console / log viewer
+        console_group = QGroupBox("控制台日志")
+        console_layout = QVBoxLayout()
+        self.console_log = QTableWidget()
+        self.console_log.setColumnCount(3)
+        self.console_log.setHorizontalHeaderLabels(['时间', '级别', '消息'])
+        self.console_log.setMaximumHeight(200)
+        self.console_log.setEditTriggers(EDIT_TRIGGERS_NONE)
+        self.console_log.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.console_log.setWordWrap(True)
+        self.console_log.verticalHeader().setVisible(False)
+        self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.console_log.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.console_log.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        console_layout.addWidget(self.console_log)
+
+        # console control buttons
+        cbtn_layout = QHBoxLayout()
+        btn_clear_log = QPushButton("清空日志")
+        btn_clear_log.clicked.connect(lambda: self.console_log.setRowCount(0))
+        btn_export_log = QPushButton("导出日志")
+        btn_export_log.clicked.connect(self._export_log)
+        cbtn_layout.addStretch()
+        cbtn_layout.addWidget(btn_clear_log)
+        cbtn_layout.addWidget(btn_export_log)
+        console_layout.addLayout(cbtn_layout)
+
+        console_group.setLayout(console_layout)
+        layout.addWidget(console_group)
+
+        # Section: 数据上传与清洗 + 预览
+        clean_group = QGroupBox("1. 数据上传与清洗（左表/右表）")
+        clean_group.setCheckable(True)
+        clean_group.setChecked(True)
+        cg_layout = QVBoxLayout()
+
+        # file selectors
+        file_layout = QHBoxLayout()
+        self.home_file_label = QLineEdit()
+        self.home_file_label.setReadOnly(True)
+        btn_select = QPushButton("选择文件(加载到左表)")
+        btn_select.clicked.connect(self._home_select_file)
+        file_layout.addWidget(self.home_file_label)
+        file_layout.addWidget(btn_select)
+        cg_layout.addLayout(file_layout)
+
+        # previews
+        preview_layout = QHBoxLayout()
+        self.left_preview = QTableWidget()
+        self.left_preview.setMaximumHeight(160)
+        self.right_preview = QTableWidget()
+        self.right_preview.setMaximumHeight(160)
+        preview_layout.addWidget(self.left_preview)
+        preview_layout.addWidget(self.right_preview)
+        cg_layout.addLayout(preview_layout)
+
+        # cleaning controls
+        self.clean_progress = QProgressBar()
+        self.clean_progress.setValue(0)
+        cg_layout.addWidget(self.clean_progress)
+
+        btns = QHBoxLayout()
+        btn_clean = QPushButton("执行清洗")
+        btn_clean.clicked.connect(self._home_run_clean)
+        btn_open_cache = QPushButton("打开清洗缓存")
+        btn_open_cache.clicked.connect(lambda: self._home_open_cache('cleaned_left'))
+        btns.addWidget(btn_clean)
+        btns.addWidget(btn_open_cache)
+        btns.addStretch()
+        cg_layout.addLayout(btns)
+
+        clean_group.setLayout(cg_layout)
+        layout.addWidget(clean_group)
+
+        # Section: 标准化
+        std_group = QGroupBox("2. 地址标准化")
+        std_group.setCheckable(True)
+        std_group.setChecked(False)
+        sg_layout = QVBoxLayout()
+        sg_layout.addWidget(QLabel("选择要标准化的字段（Home 支持单字段演示）"))
+        self.std_field_combo = QComboBox()
+        sg_layout.addWidget(self.std_field_combo)
+        self.std_progress = QProgressBar()
+        sg_layout.addWidget(self.std_progress)
+        sbtn_layout = QHBoxLayout()
+        btn_std = QPushButton("执行标准化")
+        btn_std.clicked.connect(self._home_run_standardize)
+        btn_std_cache = QPushButton("打开标准化缓存")
+        btn_std_cache.clicked.connect(lambda: self._home_open_cache('standardized_left'))
+        sbtn_layout.addWidget(btn_std)
+        sbtn_layout.addWidget(btn_std_cache)
+        sbtn_layout.addStretch()
+        sg_layout.addLayout(sbtn_layout)
+        std_group.setLayout(sg_layout)
+        layout.addWidget(std_group)
+
+        # Section: 字段推断（演示）
+        rel_group = QGroupBox("3. 智能字段匹配关系（示例）")
+        rel_group.setCheckable(True)
+        rel_group.setChecked(False)
+        rl_layout = QVBoxLayout()
+        btn_rel = QPushButton("检测字段关系")
+        btn_rel.clicked.connect(self._home_run_infer_relations)
+        rl_layout.addWidget(btn_rel)
+        self.rel_preview = QTableWidget()
+        self.rel_preview.setColumnCount(5)
+        self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
+        rl_layout.addWidget(self.rel_preview)
+        rel_group.setLayout(rl_layout)
+        layout.addWidget(rel_group)
+
+        # Section: 匹配与导出（主页唯一动作入口）
+        res_group = QGroupBox("4. 匹配与导出")
+        res_group.setCheckable(True)
+        res_group.setChecked(True)
+        rg_layout = QVBoxLayout()
+
+        # matching options
+        opt_layout = QHBoxLayout()
+        self.match_type = QComboBox()
+        self.match_type.addItems(['精准匹配', '模糊匹配'])
+        self.fuzzy_threshold = QDoubleSpinBox()
+        self.fuzzy_threshold.setRange(0.0, 1.0)
+        self.fuzzy_threshold.setValue(0.7)
+        opt_layout.addWidget(QLabel('匹配类型:'))
+        opt_layout.addWidget(self.match_type)
+        opt_layout.addWidget(QLabel('模糊阈值:'))
+        opt_layout.addWidget(self.fuzzy_threshold)
+        opt_layout.addStretch()
+        rg_layout.addLayout(opt_layout)
+
+        match_btn_layout = QHBoxLayout()
+        btn_run_match = QPushButton("开始匹配")
+        btn_run_match.clicked.connect(self._home_run_match)
+        btn_export_results = QPushButton("导出匹配结果")
+        btn_export_results.clicked.connect(self._home_export_results)
+        match_btn_layout.addStretch()
+        match_btn_layout.addWidget(btn_run_match)
+        match_btn_layout.addWidget(btn_export_results)
+        rg_layout.addLayout(match_btn_layout)
+
+        # result preview table (home shows a small summary)
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(6)
+        self.result_table.setHorizontalHeaderLabels(['左表ID', '右表ID', '匹配类型', '置信度', '左表地址', '右表地址'])
+        rg_layout.addWidget(self.result_table)
+
+        res_group.setLayout(rg_layout)
+        layout.addWidget(res_group)
+
+        # Spacer
+        layout.addStretch()
+
+        tab.setLayout(layout)
+        return tab
+
+    # ---------------- Home helpers ----------------
+    def _home_select_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "选择数据文件（加载到左表）", "", "所有支持格式 (*.csv *.xlsx *.xls *.shp *.geojson)")
+        if not file_path:
+            return
+        self.home_file_label.setText(file_path)
+        try:
+            from ..core.data_loader import DataLoader
+            data, geom = DataLoader.auto_load(file_path)
+            self.left_data = data
+            self.left_file = file_path
+            self._preview_data(self.left_preview, data)
+            # populate std combo
+            try:
+                fields = list(self.left_data[0].keys())
+                self.std_field_combo.clear()
+                self.std_field_combo.addItems(fields)
+            except Exception:
+                pass
+            self._log('INFO', f'Loaded file into left: {file_path}')
+        except Exception as e:
+            self._log('ERROR', f'Load failed: {e}')
+
+    def _home_run_clean(self):
+        if not self.left_data:
+            QMessageBox.warning(self, '提示', '请先选择并加载左表文件')
+            return
+        self.clean_progress.setValue(10)
+        cleaned = []
+        for row in self.left_data:
+            newrow = {k: (v.strip() if isinstance(v, str) else v) for k, v in row.items()}
+            if any(v not in (None, '') for v in newrow.values()):
+                cleaned.append(newrow)
+        self.left_data = cleaned
+        self._preview_data(self.left_preview, cleaned)
+        self.clean_progress.setValue(80)
+        try:
+            from ..utils.cache import save_cache
+            save_cache('cleaned_left', cleaned)
+            self._log('INFO', f'Clean complete, {len(cleaned)} rows cached')
+        except Exception as e:
+            self._log('WARN', f'Cache failed: {e}')
+        self.clean_progress.setValue(100)
+
+    def _home_run_standardize(self):
+        if not self.left_data:
+            QMessageBox.warning(self, '提示', '请先加载左表')
+            return
+        field = self.std_field_combo.currentText()
+        if not field:
+            QMessageBox.warning(self, '提示', '请选择要标准化的字段')
+            return
+        self.std_progress.setValue(10)
+        mapping = {'北京市': '北京', '上海市': '上海'}
+        for row in self.left_data:
+            val = row.get(field)
+            if isinstance(val, str) and val in mapping:
+                row[field] = mapping[val]
+        self._preview_data(self.left_preview, self.left_data)
+        self.std_progress.setValue(80)
+        try:
+            from ..utils.cache import save_cache
+            save_cache('standardized_left', self.left_data)
+            self._log('INFO', f'Standardized field {field} and cached')
+        except Exception as e:
+            self._log('WARN', f'Cache failed: {e}')
+        self.std_progress.setValue(100)
+
+    def _home_run_infer_relations(self):
+        if not self.left_data or not self.right_data:
+            QMessageBox.warning(self, '提示', '请加载左/右表以推断字段关系')
+            return
+        try:
+            from ..core.field_detector import FieldDetector
+            detector = FieldDetector()
+            rels = detector.infer_field_relationships({'left': self.left_data, 'right': self.right_data})
+            self.rel_preview.setRowCount(0)
+            for rel in rels[:50]:
+                s1, f1, s2, f2, score = rel
+                r = self.rel_preview.rowCount()
+                self.rel_preview.insertRow(r)
+                self.rel_preview.setItem(r, 0, QTableWidgetItem(s1))
+                self.rel_preview.setItem(r, 1, QTableWidgetItem(f1))
+                self.rel_preview.setItem(r, 2, QTableWidgetItem(s2))
+                self.rel_preview.setItem(r, 3, QTableWidgetItem(f2))
+                self.rel_preview.setItem(r, 4, QTableWidgetItem(f"{score:.2%}"))
+            self._log('INFO', f'Inferred {len(rels)} relationships')
+        except Exception as e:
+            self._log('ERROR', f'Infer failed: {e}')
+
+    def _home_run_match(self):
+        if not self.left_data or not self.right_data:
+            QMessageBox.warning(self, '提示', '请先加载左/右表')
+            return
+        from ..core.match_engine import MatchEngine
+        engine = MatchEngine(fuzzy_threshold=self.fuzzy_threshold.value())
+
+        match_type = self.match_type.currentText()
+        if match_type == '精准匹配':
+            # quick demo: match by first field
+            lf = list(self.left_data[0].keys())[0]
+            rf = list(self.right_data[0].keys())[0]
+            results = engine.exact_match(self.left_data, self.right_data, lf, rf)
+        else:
+            lf = list(self.left_data[0].keys())[0]
+            rf = list(self.right_data[0].keys())[0]
+            results = engine.fuzzy_match(self.left_data, self.right_data, lf, rf)
+
+        # display limited results in home result_table
+        self.result_table.setRowCount(0)
+        for res in results[:200]:
+            r = self.result_table.rowCount()
+            self.result_table.insertRow(r)
+            left_id = str(res['left'].get('id', ''))
+            right_id = str(res['right'].get('id', res['right'].get('record_id', '')))
+            self.result_table.setItem(r, 0, QTableWidgetItem(left_id))
+            self.result_table.setItem(r, 1, QTableWidgetItem(right_id))
+            self.result_table.setItem(r, 2, QTableWidgetItem(res.get('match_type', '')))
+            self.result_table.setItem(r, 3, QTableWidgetItem(f"{res.get('confidence', 0):.2%}"))
+            self.result_table.setItem(r, 4, QTableWidgetItem(str(res['left'])[:150]))
+            self.result_table.setItem(r, 5, QTableWidgetItem(str(res['right'])[:150]))
+
+        self._log('INFO', f'Match finished, found {len(results)} results')
+
+    def _home_export_results(self):
+        if self.result_table.rowCount() == 0:
+            QMessageBox.warning(self, '提示', '无匹配结果可导出')
+            return
+        file_path, _ = QFileDialog.getSaveFileName(self, '保存匹配结果', '', 'CSV (*.csv)')
+        if not file_path:
+            return
+        import csv
+        with open(file_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            headers = [self.result_table.horizontalHeaderItem(i).text() for i in range(self.result_table.columnCount())]
+            writer.writerow(headers)
+            for r in range(self.result_table.rowCount()):
+                row = [self.result_table.item(r, c).text() if self.result_table.item(r, c) else '' for c in range(self.result_table.columnCount())]
+                writer.writerow(row)
+        self._log('INFO', f'Exported results to {file_path}')
+
+    def _preview_data(self, table: QTableWidget, data: List[Dict]):
+        if not data:
+            return
+        table.setRowCount(0)
+        table.setColumnCount(0)
+        first = data[0]
+        cols = list(first.keys())
+        table.setColumnCount(len(cols))
+        table.setHorizontalHeaderLabels(cols)
+        for i, row in enumerate(data[:5]):
+            table.insertRow(i)
+            for j, col in enumerate(cols):
+                table.setItem(i, j, QTableWidgetItem(str(row.get(col, ''))[:120]))
+
+    def _log(self, level: str, msg: str):
+        import datetime
+        r = self.console_log.rowCount()
+        self.console_log.insertRow(r)
+        self.console_log.setItem(r, 0, QTableWidgetItem(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.console_log.setItem(r, 1, QTableWidgetItem(level))
+        self.console_log.setItem(r, 2, QTableWidgetItem(msg))
+        try:
+            self.console_log.resizeRowsToContents()
+            if self.console_log.rowCount() > 0:
+                self.console_log.scrollToItem(self.console_log.item(r, 0))
+                self.console_log.setCurrentCell(r, 0)
+        except Exception:
+            pass
+
+    def _export_log(self):
+        if self.console_log.rowCount() == 0:
+            QMessageBox.information(self, '提示', '日志为空')
+            return
+        file_path, _ = QFileDialog.getSaveFileName(self, '导出日志', '', 'CSV (*.csv)')
+        if not file_path:
+            return
+        import csv
+        with open(file_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['时间', '级别', '消息'])
+            for r in range(self.console_log.rowCount()):
+                t = self.console_log.item(r, 0).text() if self.console_log.item(r, 0) else ''
+                lv = self.console_log.item(r, 1).text() if self.console_log.item(r, 1) else ''
+                msg = self.console_log.item(r, 2).text() if self.console_log.item(r, 2) else ''
+                writer.writerow([t, lv, msg])
+        self._log('INFO', f'Exported log to {file_path}')
+"""
 地址匹配 UI 对话框 - QGIS 插件主界面
 """
 
@@ -9,6 +420,7 @@ try:
     from qgis.PyQt.QtWidgets import (
         QDialog, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
         QPushButton, QLabel, QFileDialog, QTableWidget, QTableWidgetItem,
+            QHeaderView, QAbstractItemView,
         QComboBox, QSpinBox, QDoubleSpinBox, QMessageBox, QProgressBar,
         QLineEdit, QGroupBox, QFormLayout, QCheckBox
     )
@@ -49,7 +461,28 @@ class MatchDialog(QDialog):
         tabs.addTab(self._create_matching_tab(), "匹配配置")
         tabs.addTab(self._create_result_tab(), "匹配结果")
 
+        # keep reference for cross-widget synchronization
+        self.tabs = tabs
+
         layout.addWidget(tabs)
+
+        # connect Home group toggles to switch tabs (if groups exist)
+        try:
+            if getattr(self, 'clean_group', None):
+                self.clean_group.toggled.connect(self._on_group_toggled_switch_tab(1))
+            if getattr(self, 'std_group', None):
+                self.std_group.toggled.connect(self._on_group_toggled_switch_tab(2))
+            if getattr(self, 'matchrel_group', None):
+                self.matchrel_group.toggled.connect(self._on_group_toggled_switch_tab(2))
+            if getattr(self, 'res_group', None):
+                self.res_group.toggled.connect(self._on_group_toggled_switch_tab(3))
+            if getattr(self, 'vis_group', None):
+                self.vis_group.toggled.connect(self._on_group_toggled_switch_tab(4))
+
+            # when user changes tabs, try to expand a related Home group for context
+            self.tabs.currentChanged.connect(self._on_tab_changed_sync_groups)
+        except Exception:
+            pass
 
         # 底部按钮
         btn_layout = QHBoxLayout()
@@ -120,6 +553,41 @@ class MatchDialog(QDialog):
         tab.setLayout(layout)
         return tab
 
+    def _on_group_toggled_switch_tab(self, index: int):
+        """Return a callback to switch to tab `index` when a group is expanded."""
+        def _cb(checked: bool):
+            try:
+                if checked and hasattr(self, 'tabs'):
+                    # switch to the corresponding tab
+                    self.tabs.setCurrentIndex(index)
+            except Exception:
+                pass
+        return _cb
+
+    def _on_tab_changed_sync_groups(self, index: int):
+        """When the user changes tab, expand the related group in Home and collapse others."""
+        try:
+            mapping = {
+                0: getattr(self, 'clean_group', None),
+                1: None,  # Data tab not represented as a Home group
+                2: None,
+                3: getattr(self, 'res_group', None),
+                4: getattr(self, 'res_group', None),
+            }
+            # If switching to Home (index 0) do nothing here; otherwise ensure a visible cue
+            # Expand the Home group that most closely matches the tab (simple heuristic)
+            # We'll expand the first relevant Home group when the tab changes.
+            if index == 0:
+                return
+            # for simplicity, expand res_group when entering matching/result tabs
+            if index in (3, 4) and getattr(self, 'res_group', None):
+                self.res_group.setChecked(True)
+            # if data tab, expand clean_group
+            if index == 1 and getattr(self, 'clean_group', None):
+                self.clean_group.setChecked(True)
+        except Exception:
+            pass
+
     def _create_field_tab(self) -> QDialog:
         """字段映射标签页"""
         tab = QDialog()
@@ -170,9 +638,19 @@ class MatchDialog(QDialog):
         console_group = QGroupBox("控制台日志")
         console_layout = QVBoxLayout()
         self.console_log = QTableWidget()
-        self.console_log.setColumnCount(2)
-        self.console_log.setHorizontalHeaderLabels(['时间', '消息'])
-        self.console_log.setMaximumHeight(150)
+        # use 3 columns: 时间, 级别, 消息 (message column will stretch)
+        self.console_log.setColumnCount(3)
+        self.console_log.setHorizontalHeaderLabels(['时间', '级别', '消息'])
+        self.console_log.setMaximumHeight(200)
+        # UX improvements
+        self.console_log.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.console_log.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.console_log.setWordWrap(True)
+        self.console_log.verticalHeader().setVisible(False)
+        # header sizing: time and level autosize, message stretch
+        self.console_log.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.console_log.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.console_log.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         console_layout.addWidget(self.console_log)
         console_group.setLayout(console_layout)
         layout.addWidget(console_group)
@@ -185,7 +663,11 @@ class MatchDialog(QDialog):
         clean_group.setCheckable(True)
         clean_group.setChecked(True)
         clean_group.setStyleSheet('QGroupBox { font-weight: bold; }')
-        clean_layout = QVBoxLayout()
+
+        # contenu widget: put all controls into a single child widget so hiding collapses properly
+        clean_content = QWidget()
+        clean_content_layout = QVBoxLayout(clean_content)
+        clean_content_layout.setContentsMargins(0, 0, 0, 0)
 
         upload_layout = QHBoxLayout()
         self.home_file_label = QLineEdit()
@@ -194,11 +676,11 @@ class MatchDialog(QDialog):
         upload_btn.clicked.connect(lambda: self._home_select_file())
         upload_layout.addWidget(self.home_file_label)
         upload_layout.addWidget(upload_btn)
-        clean_layout.addLayout(upload_layout)
+        clean_content_layout.addLayout(upload_layout)
 
         self.clean_progress = QProgressBar()
         self.clean_progress.setValue(0)
-        clean_layout.addWidget(self.clean_progress)
+        clean_content_layout.addWidget(self.clean_progress)
 
         clean_btns = QHBoxLayout()
         btn_clean_run = QPushButton("执行清洗")
@@ -207,9 +689,17 @@ class MatchDialog(QDialog):
         btn_clean_cache.clicked.connect(lambda: self._home_open_cache('clean'))
         clean_btns.addWidget(btn_clean_run)
         clean_btns.addWidget(btn_clean_cache)
-        clean_layout.addLayout(clean_btns)
+        clean_content_layout.addLayout(clean_btns)
 
-        clean_group.setLayout(clean_layout)
+        # set QGroupBox layout and add the single content widget
+        clean_group_layout = QVBoxLayout()
+        clean_group_layout.setContentsMargins(6, 20, 6, 6)
+        clean_group_layout.addWidget(clean_content)
+        clean_group.setLayout(clean_group_layout)
+        # keep a reference to the content widget for simpler toggling
+        clean_group._content_widget = clean_content
+        # expose as attributes for tab/group synchronization
+        self.clean_group = clean_group
         layout.addWidget(clean_group)
 
         # connect toggled for collapse/expand
@@ -220,14 +710,17 @@ class MatchDialog(QDialog):
         std_group.setCheckable(True)
         std_group.setChecked(False)
         std_group.setStyleSheet('QGroupBox { font-weight: bold; }')
-        std_layout = QVBoxLayout()
 
-        std_layout.addWidget(QLabel("选择要标准化的字段（可多选）："))
+        std_content = QWidget()
+        std_content_layout = QVBoxLayout(std_content)
+        std_content_layout.setContentsMargins(0, 0, 0, 0)
+
+        std_content_layout.addWidget(QLabel("选择要标准化的字段（可多选）："))
         self.std_field_combo = QComboBox()
-        std_layout.addWidget(self.std_field_combo)
+        std_content_layout.addWidget(self.std_field_combo)
 
         self.std_progress = QProgressBar()
-        std_layout.addWidget(self.std_progress)
+        std_content_layout.addWidget(self.std_progress)
 
         std_btns = QHBoxLayout()
         btn_std_run = QPushButton("执行标准化")
@@ -236,9 +729,14 @@ class MatchDialog(QDialog):
         btn_std_cache.clicked.connect(lambda: self._home_open_cache('standardize'))
         std_btns.addWidget(btn_std_run)
         std_btns.addWidget(btn_std_cache)
-        std_layout.addLayout(std_btns)
+        std_content_layout.addLayout(std_btns)
 
-        std_group.setLayout(std_layout)
+        std_group_layout = QVBoxLayout()
+        std_group_layout.setContentsMargins(6, 20, 6, 6)
+        std_group_layout.addWidget(std_content)
+        std_group.setLayout(std_group_layout)
+        std_group._content_widget = std_content
+        self.std_group = std_group
         layout.addWidget(std_group)
         std_group.toggled.connect(lambda checked, g=std_group: self._toggle_group_visibility(g, checked))
 
@@ -247,18 +745,26 @@ class MatchDialog(QDialog):
         matchrel_group.setCheckable(True)
         matchrel_group.setChecked(False)
         matchrel_group.setStyleSheet('QGroupBox { font-weight: bold; }')
-        matchrel_layout = QVBoxLayout()
+
+        matchrel_content = QWidget()
+        matchrel_content_layout = QVBoxLayout(matchrel_content)
+        matchrel_content_layout.setContentsMargins(0, 0, 0, 0)
 
         btn_rel_run = QPushButton("检测字段关系")
         btn_rel_run.clicked.connect(lambda: self._home_run_infer_relations())
-        matchrel_layout.addWidget(btn_rel_run)
+        matchrel_content_layout.addWidget(btn_rel_run)
 
         self.rel_preview = QTableWidget()
         self.rel_preview.setColumnCount(5)
         self.rel_preview.setHorizontalHeaderLabels(['源1', '字段1', '源2', '字段2', '相似度'])
-        matchrel_layout.addWidget(self.rel_preview)
+        matchrel_content_layout.addWidget(self.rel_preview)
 
-        matchrel_group.setLayout(matchrel_layout)
+        matchrel_group_layout = QVBoxLayout()
+        matchrel_group_layout.setContentsMargins(6, 20, 6, 6)
+        matchrel_group_layout.addWidget(matchrel_content)
+        matchrel_group.setLayout(matchrel_group_layout)
+        matchrel_group._content_widget = matchrel_content
+        self.matchrel_group = matchrel_group
         layout.addWidget(matchrel_group)
         matchrel_group.toggled.connect(lambda checked, g=matchrel_group: self._toggle_group_visibility(g, checked))
 
@@ -267,17 +773,25 @@ class MatchDialog(QDialog):
         res_group.setCheckable(True)
         res_group.setChecked(False)
         res_group.setStyleSheet('QGroupBox { font-weight: bold; }')
-        res_layout = QVBoxLayout()
+
+        res_content = QWidget()
+        res_content_layout = QVBoxLayout(res_content)
+        res_content_layout.setContentsMargins(0, 0, 0, 0)
 
         btn_res_run = QPushButton("执行匹配(快速示例)")
         btn_res_run.clicked.connect(lambda: self._home_run_match())
-        res_layout.addWidget(btn_res_run)
+        res_content_layout.addWidget(btn_res_run)
 
         btn_export_all = QPushButton("导出匹配/未匹配数据")
         btn_export_all.clicked.connect(lambda: self._home_export_results())
-        res_layout.addWidget(btn_export_all)
+        res_content_layout.addWidget(btn_export_all)
 
-        res_group.setLayout(res_layout)
+        res_group_layout = QVBoxLayout()
+        res_group_layout.setContentsMargins(6, 20, 6, 6)
+        res_group_layout.addWidget(res_content)
+        res_group.setLayout(res_group_layout)
+        res_group._content_widget = res_content
+        self.res_group = res_group
         layout.addWidget(res_group)
         res_group.toggled.connect(lambda checked, g=res_group: self._toggle_group_visibility(g, checked))
 
@@ -286,11 +800,20 @@ class MatchDialog(QDialog):
         vis_group.setCheckable(True)
         vis_group.setChecked(False)
         vis_group.setStyleSheet('QGroupBox { font-weight: bold; }')
-        vis_layout = QVBoxLayout()
+
+        vis_content = QWidget()
+        vis_content_layout = QVBoxLayout(vis_content)
+        vis_content_layout.setContentsMargins(0, 0, 0, 0)
         btn_vis = QPushButton("在地图上显示匹配关系")
         btn_vis.clicked.connect(lambda: self._home_show_on_map())
-        vis_layout.addWidget(btn_vis)
-        vis_group.setLayout(vis_layout)
+        vis_content_layout.addWidget(btn_vis)
+
+        vis_group_layout = QVBoxLayout()
+        vis_group_layout.setContentsMargins(6, 20, 6, 6)
+        vis_group_layout.addWidget(vis_content)
+        vis_group.setLayout(vis_group_layout)
+        vis_group._content_widget = vis_content
+        self.vis_group = vis_group
         layout.addWidget(vis_group)
         vis_group.toggled.connect(lambda checked, g=vis_group: self._toggle_group_visibility(g, checked))
 
@@ -733,11 +1256,17 @@ class MatchDialog(QDialog):
         import datetime
         r = self.console_log.rowCount()
         self.console_log.insertRow(r)
+        # columns: 0=time, 1=level, 2=message
         self.console_log.setItem(r, 0, QTableWidgetItem(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        self.console_log.setItem(r, 1, QTableWidgetItem(f'[{level}] {msg}'))
+        self.console_log.setItem(r, 1, QTableWidgetItem(level))
+        self.console_log.setItem(r, 2, QTableWidgetItem(msg))
         try:
-            # auto-scroll to latest
-            self.console_log.scrollToBottom()
+            # resize row height to fit wrapped message and auto-scroll to latest
+            self.console_log.resizeRowsToContents()
+            # select last row to ensure visibility
+            if self.console_log.rowCount() > 0:
+                self.console_log.scrollToItem(self.console_log.item(r, 0))
+                self.console_log.setCurrentCell(r, 0)
         except Exception:
             pass
 
@@ -749,6 +1278,15 @@ class MatchDialog(QDialog):
         group's layout; when checked, show them.
         """
         try:
+            # Prefer toggling a single content widget when present.
+            content = getattr(group, '_content_widget', None)
+            if content is not None:
+                content.setVisible(checked)
+                # force relayout
+                content.updateGeometry()
+                group.updateGeometry()
+                return
+
             layout = group.layout()
             if layout is None:
                 return

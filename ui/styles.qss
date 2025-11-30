@@ -1,25 +1,107 @@
 /* ============================================================
    QSS Stylesheet for fz_adr_match plugin
-   地址匹配插件的主样式表
+   地址匹配插件的主样式表 - QGIS风格配色
    ============================================================ */
 
-/* Collapsible GroupBox with arrow indicators */
+/* QGIS风格配色变量（通过注释说明，实际QSS不支持变量） */
+/* 主背景: #ffffff, 侧边栏: #f0f0f0, 边框: #d0d0d0, 主题色: #0078d4, 文字: #000000 */
+
+/* ========== 主对话框样式 ========== */
+/* 侧边栏样式 */
+QWidget#sidebar {
+    background-color: #f0f0f0;
+    color: #000000;
+    border-right: 1px solid #c0c0c0;
+}
+
+QLabel#sidebar_header {
+    padding: 12px 14px;
+    border-bottom: 1px solid #c0c0c0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #000000;
+    background-color: #f0f0f0;
+}
+
+QListWidget#step_list {
+    border: none;
+    background-color: transparent;
+    color: #000000;
+    font-size: 13px;
+    padding: 4px 0px;
+}
+
+QListWidget#step_list::item {
+    padding: 8px 14px;
+    border-left: 3px solid transparent;
+    min-height: 20px;
+}
+
+QListWidget#step_list::item:hover {
+    background-color: #e0e0e0;
+}
+
+QListWidget#step_list::item:selected {
+    background-color: #d0e8ff;
+    border-left-color: #0078d4;
+    color: #000000;
+}
+
+QLabel#sidebar_footer {
+    padding: 10px 14px;
+    border-top: 1px solid #c0c0c0;
+    font-size: 11px;
+    color: #666666;
+    background-color: #f0f0f0;
+}
+
+/* 主内容区样式 */
+QWidget#main_content {
+    background-color: #ffffff;
+}
+
+QWidget#header_widget {
+    background-color: #ffffff;
+    border-bottom: 1px solid #d0d0d0;
+    padding: 10px 16px;
+}
+
+QLabel#header_title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #000000;
+}
+
+QLabel#header_subtitle {
+    font-size: 13px;
+    color: #666666;
+}
+
+QScrollArea#content_scroll {
+    border: none;
+    background-color: #ffffff;
+}
+
+/* ========== GroupBox样式 ========== */
 QGroupBox {
-    border: 1px solid #cccccc;
+    border: 1px solid #d0d0d0;
     border-radius: 4px;
-    margin-top: 8px;
-    padding-top: 8px;
-    font-weight: bold;
-    color: #333333;
+    margin-top: 12px;
+    padding-top: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #000000;
+    background-color: #ffffff;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     left: 10px;
-    padding: 0 3px 0 3px;
+    padding: 0 4px;
+    color: #000000;
 }
 
-/* Arrow indicator (down when checked, right when unchecked) */
+/* Collapsible GroupBox with arrow indicators */
 QGroupBox::indicator {
     width: 18px;
     height: 18px;
@@ -28,14 +110,14 @@ QGroupBox::indicator {
 
 /* Down arrow when section is expanded (checked) */
 QGroupBox::indicator:checked {
-    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNNyAxMEwxMSAxNEwxNyA4IiBzdHJva2U9IiMzMzMzMzMiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+);
+    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNNyAxMEwxMSAxNEwxNyA4IiBzdHJva2U9IiMwMDAwMDAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PC9zdmc+);
     background-repeat: no-repeat;
     background-position: center;
 }
 
 /* Right arrow when section is collapsed (unchecked) */
 QGroupBox::indicator:unchecked {
-    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCA1TDEzIDEwTDggMTUiIHN0cm9rZT0iIzMzMzMzMyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=);
+    background-image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHZpZXdCb3g9IjAgMCAxOCAxOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCA1TDEzIDEwTDggMTUiIHN0cm9rZT0iIzAwMDAwMCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=);
     background-repeat: no-repeat;
     background-position: center;
 }
@@ -44,4 +126,138 @@ QGroupBox::indicator:unchecked {
 QGroupBox::indicator:hover {
     background-color: #f0f0f0;
     border-radius: 3px;
+}
+
+/* ========== 表格样式 ========== */
+QTableWidget {
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    gridline-color: #d0d0d0;
+    font-size: 13px;
+}
+
+QTableWidget::item {
+    padding: 6px 8px;
+    border: none;
+}
+
+QTableWidget::item:selected {
+    background-color: #d0e8ff;
+    color: #000000;
+}
+
+QTableWidget::item:hover {
+    background-color: #f0f0f0;
+}
+
+QHeaderView::section {
+    background-color: #f0f0f0;
+    border: 1px solid #d0d0d0;
+    padding: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    color: #000000;
+}
+
+/* ========== 输入框样式 ========== */
+QLineEdit {
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 13px;
+    background-color: #ffffff;
+    color: #000000;
+}
+
+QLineEdit:focus {
+    border-color: #0078d4;
+    outline: none;
+}
+
+QComboBox {
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 13px;
+    background-color: #ffffff;
+    color: #000000;
+}
+
+QComboBox:focus {
+    border-color: #0078d4;
+}
+
+/* ========== 按钮样式 ========== */
+QPushButton {
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid #d0d0d0;
+    background-color: #f0f0f0;
+    color: #000000;
+}
+
+QPushButton:hover {
+    background-color: #e0e0e0;
+}
+
+QPushButton:pressed {
+    background-color: #d0d0d0;
+}
+
+QPushButton:disabled {
+    background-color: #c0c0c0;
+    color: #666666;
+}
+
+/* 主按钮样式 */
+QPushButton[class="primary"] {
+    background-color: #0078d4;
+    border-color: #0078d4;
+    color: #ffffff;
+}
+
+QPushButton[class="primary"]:hover {
+    background-color: #005a9e;
+}
+
+QPushButton[class="primary"]:pressed {
+    background-color: #004578;
+}
+
+/* ========== 日志面板样式 ========== */
+QGroupBox#log_panel_group {
+    border: 1px solid #c0c0c0;
+    border-radius: 4px;
+    margin-top: 8px;
+    padding-top: 18px;
+    font-weight: 600;
+    font-size: 14px;
+    color: #000000;
+    background-color: #ffffff;
+}
+
+QGroupBox#log_panel_group::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 8px;
+    color: #000000;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+QTextEdit#log_panel {
+    background-color: #ffffff;
+    color: #000000;
+    font-size: 12px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    padding: 8px 10px;
+}
+
+/* ========== Splitter样式 ========== */
+QSplitter#main_splitter::handle {
+    background-color: #d0d0d0;
 }

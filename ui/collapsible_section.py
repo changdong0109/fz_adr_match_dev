@@ -99,11 +99,44 @@ class CollapsibleSection(QWidget):
         self._toggle_btn.setCheckable(True)
         self._toggle_btn.setChecked(expanded)
         self._toggle_btn.setAutoRaise(True)
-        self._toggle_btn.setCursor(Qt.PointingHandCursor)
+        # 安全获取 PointingHandCursor（兼容不同PyQt版本）
+        try:
+            if hasattr(Qt, 'CursorShape') and hasattr(Qt.CursorShape, 'PointingHandCursor'):
+                cursor = Qt.CursorShape.PointingHandCursor
+            elif hasattr(Qt, 'PointingHandCursor'):
+                cursor = Qt.PointingHandCursor
+            else:
+                # 使用数值常量：PointingHandCursor = 13
+                cursor = 13
+            self._toggle_btn.setCursor(cursor)
+        except (AttributeError, TypeError):
+            # 如果都失败，使用数值常量
+            try:
+                self._toggle_btn.setCursor(13)
+            except Exception:
+                pass
 
         self._title_label = QLabel(title, header)
         self._title_label.setObjectName('collapsible_section_title')
-        self._title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        # 安全获取 QSizePolicy 常量（兼容不同PyQt版本）
+        try:
+            if hasattr(QSizePolicy, 'Policy') and hasattr(QSizePolicy.Policy, 'Expanding'):
+                expanding = QSizePolicy.Policy.Expanding
+                preferred = QSizePolicy.Policy.Preferred
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+                preferred = QSizePolicy.Preferred
+            else:
+                # 使用数值常量：Expanding = 7, Preferred = 1
+                expanding = 7
+                preferred = 1
+            self._title_label.setSizePolicy(expanding, preferred)
+        except (AttributeError, TypeError):
+            # 如果都失败，使用数值常量
+            try:
+                self._title_label.setSizePolicy(7, 1)  # Expanding, Preferred
+            except Exception:
+                pass
 
         header_layout.addWidget(self._toggle_btn)
         header_layout.addWidget(self._title_label)
@@ -135,10 +168,20 @@ class CollapsibleSection(QWidget):
         QFrame#collapsible_section_frame { 
             border: 1px solid #d0d0d0; 
             border-radius: 4px; 
-            background: #fafafa; 
+            background: #ffffff; 
         }
         QLabel#collapsible_section_title { 
-            font-weight: bold; 
+            font-weight: 600;
+            color: #000000;
+            font-size: 14px;
+        }
+        QToolButton {
+            border: none;
+            background: transparent;
+        }
+        QToolButton:hover {
+            background-color: #f0f0f0;
+            border-radius: 3px;
         }
         """
         try:

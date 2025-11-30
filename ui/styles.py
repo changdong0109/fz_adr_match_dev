@@ -80,6 +80,31 @@ class StyleManager:
         # 当前直接加载整个文件
         cls._styles['collapsible_groupbox'] = qss
         cls._styles['main'] = qss
+    
+    @classmethod
+    def get_sidebar_style(cls) -> str:
+        """获取侧边栏样式"""
+        return """
+            QWidget {
+                background-color: #f0f0f0;
+                color: #000000;
+            }
+        """
+    
+    @classmethod
+    def get_log_panel_style(cls) -> str:
+        """获取日志面板样式"""
+        return """
+            QTextEdit {
+                background-color: #ffffff;
+                color: #000000;
+                font-size: 12px;
+                font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                border: 1px solid #d0d0d0;
+                border-radius: 4px;
+                padding: 8px 10px;
+            }
+        """
 
 
 # 便捷函数 - 全局接口

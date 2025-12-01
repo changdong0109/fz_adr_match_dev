@@ -89,7 +89,7 @@ class MatchDialog(QDialog):
         self.step_list.setSpacing(1)  # QGIS标准间距
         # QListWidget 默认就是单选模式，无需设置
         
-        # 步骤定义（简洁文本，符合QGIS命名规范）
+        # 步骤定义（QGIS原生风格，简洁文本）
         steps = [
             "Step1 文件导入",
             "Step2 字段映射与清洗",
@@ -198,12 +198,16 @@ class MatchDialog(QDialog):
         self.step_widgets[4] = Step4Widget(
             self, self._log, self.task_manager,
             open_filter_modal=self._open_filter_modal,
-            open_match_modal=self._open_match_modal
+            open_match_modal=self._open_match_modal,
+            global_config=self.global_config
         )
         
-        # Step5不需要日志面板（因为日志面板已经在主对话框中）
-        step5 = Step5Widget(self, self._log, self.task_manager, log_panel=None)
-        self.step_widgets[5] = step5
+        # Step5
+        self.step_widgets[5] = Step5Widget(
+            self, self._log, self.task_manager, 
+            log_panel=None,
+            global_config=self.global_config
+        )
         
         for i, widget in self.step_widgets.items():
             self.content_layout.addWidget(widget)
@@ -343,7 +347,7 @@ class MatchDialog(QDialog):
         self._switch_step(index + 1)
     
     def _log(self, msg: str, level: str = "info"):
-        """添加日志 - 统一日志入口"""
+        """添加日志 - 统一日志入口，限制最近500条"""
         if self.log_panel:
             timestamp = datetime.now().strftime("%H:%M:%S")
             level_upper = level.upper()
@@ -359,6 +363,15 @@ class MatchDialog(QDialog):
             
             log_text = f'<span style="color: {color};">[{level_upper} {timestamp}] {msg}</span>'
             self.log_panel.append(log_text)
+            
+            # 限制日志条数为500条
+            max_lines = 500
+            doc = self.log_panel.document()
+            if doc.blockCount() > max_lines:
+                cursor = self.log_panel.textCursor()
+                cursor.movePosition(cursor.MoveOperation.Start)
+                cursor.movePosition(cursor.MoveOperation.Down, cursor.MoveMode.KeepAnchor, doc.blockCount() - max_lines)
+                cursor.removeSelectedText()
             
             scrollbar = self.log_panel.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())

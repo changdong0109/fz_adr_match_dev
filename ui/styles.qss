@@ -7,52 +7,61 @@
 /* 主背景: #ffffff, 侧边栏: #f0f0f0, 边框: #d0d0d0, 主题色: #0078d4, 文字: #000000 */
 
 /* ========== 主对话框样式 ========== */
-/* 侧边栏样式 */
+/* 侧边栏样式 - QGIS原生开发标准 */
+/* 参考QGIS官方UI设计指南：使用系统调色板，简洁设计 */
 QWidget#sidebar {
-    background-color: #f0f0f0;
-    color: #000000;
-    border-right: 1px solid #c0c0c0;
+    background-color: palette(window);
+    color: palette(windowText);
+    border-right: 1px solid palette(mid);
 }
 
 QLabel#sidebar_header {
-    padding: 12px 14px;
-    border-bottom: 1px solid #c0c0c0;
-    font-size: 14px;
+    padding: 8px 10px;
+    border-bottom: 1px solid palette(mid);
+    font-size: 12px;
     font-weight: 600;
-    color: #000000;
-    background-color: #f0f0f0;
+    color: palette(windowText);
+    background-color: palette(button);
 }
 
 QListWidget#step_list {
     border: none;
     background-color: transparent;
-    color: #000000;
-    font-size: 13px;
-    padding: 4px 0px;
+    outline: none;
+    color: palette(windowText);
+    font-size: 11px;
+    padding: 2px 0px;
+    alternate-background-color: transparent;
 }
 
 QListWidget#step_list::item {
-    padding: 8px 14px;
-    border-left: 3px solid transparent;
-    min-height: 20px;
+    padding: 5px 10px;
+    border: none;
+    min-height: 22px;
+    color: palette(windowText);
 }
 
 QListWidget#step_list::item:hover {
-    background-color: #e0e0e0;
+    background-color: palette(highlight);
+    color: palette(highlightedText);
 }
 
 QListWidget#step_list::item:selected {
-    background-color: #d0e8ff;
-    border-left-color: #0078d4;
-    color: #000000;
+    background-color: palette(highlight);
+    color: palette(highlightedText);
+}
+
+QListWidget#step_list::item:selected:hover {
+    background-color: palette(highlight);
+    color: palette(highlightedText);
 }
 
 QLabel#sidebar_footer {
-    padding: 10px 14px;
-    border-top: 1px solid #c0c0c0;
-    font-size: 11px;
-    color: #666666;
-    background-color: #f0f0f0;
+    padding: 6px 10px;
+    border-top: 1px solid palette(mid);
+    font-size: 9px;
+    color: palette(disabled, windowText);
+    background-color: palette(button);
 }
 
 /* 主内容区样式 */
@@ -151,6 +160,41 @@ QTableWidget::item:hover {
     background-color: #f0f0f0;
 }
 
+/* 表格中的下拉框样式 */
+QTableWidget QComboBox {
+    border: 1px solid #d0d0d0;
+    border-radius: 3px;
+    padding: 4px 8px;
+    background-color: #ffffff;
+    min-width: 140px;
+}
+
+QTableWidget QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QTableWidget QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+
+/* Step1 表格样式 */
+QTableWidget#step1_data_sources_table::item {
+    padding: 4px 8px;
+}
+
+QTableWidget#step1_data_sources_table QCheckBox {
+    margin-left: 12px;
+    padding: 2px;
+}
+
+/* Step1 状态标签样式 */
+QLabel#step1_shp_status_label {
+    color: #666666;
+    font-size: 12px;
+}
+
 QHeaderView::section {
     background-color: #f0f0f0;
     border: 1px solid #d0d0d0;
@@ -226,6 +270,52 @@ QPushButton[class="primary"]:pressed {
     background-color: #004578;
 }
 
+/* ========== Step1 按钮样式 ========== */
+QPushButton#step1_btn_add,
+QPushButton#step1_btn_del,
+QPushButton#step1_btn_refresh,
+QPushButton#step1_btn_browse {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-width: 80px;
+}
+
+QPushButton#step1_btn_run {
+    background-color: #0078d4;
+    border-color: #0078d4;
+    color: #ffffff;
+    font-size: 13px;
+    padding: 6px 16px;
+    min-width: 80px;
+}
+
+QPushButton#step1_btn_run:hover {
+    background-color: #005a9e;
+}
+
+QPushButton#step1_btn_pause,
+QPushButton#step1_btn_stop {
+    font-size: 13px;
+    padding: 6px 16px;
+    min-width: 80px;
+}
+
+/* ========== 进度条样式 ========== */
+QProgressBar {
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    text-align: center;
+    font-size: 12px;
+    color: #000000;
+    height: 24px;
+}
+
+QProgressBar::chunk {
+    background-color: #0078d4;
+    border-radius: 3px;
+}
+
 /* ========== 日志面板样式 ========== */
 QGroupBox#log_panel_group {
     border: 1px solid #c0c0c0;
@@ -257,7 +347,3 @@ QTextEdit#log_panel {
     padding: 8px 10px;
 }
 
-/* ========== Splitter样式 ========== */
-QSplitter#main_splitter::handle {
-    background-color: #d0d0d0;
-}

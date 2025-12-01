@@ -5,8 +5,9 @@ from datetime import datetime
 from typing import Dict, Callable, Optional
 from qgis.PyQt.QtWidgets import (
     QDialog, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QListWidget,
-    QListWidgetItem, QTextEdit, QScrollArea, QSplitter, QGroupBox
+    QListWidgetItem, QTextEdit, QScrollArea, QGroupBox
 )
+from qgis.PyQt.QtCore import QEvent
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QFont
 
@@ -48,9 +49,11 @@ class MatchDialog(QDialog):
         self._build_ui()
         self._apply_styles()
 
-        # 初始化状态
-        self._current_step = 2
-        self._switch_step(2)
+        # 初始化状态：默认显示Step1
+        self._current_step = 1
+        self._initialized = False  # 标记初始化状态
+        self._switch_step(1)
+        self._initialized = True  # 标记初始化完成
 
     def _build_ui(self):
         """构建主UI：侧边栏导航 + 主内容区"""
@@ -65,37 +68,44 @@ class MatchDialog(QDialog):
         self._build_main_content(main_layout)
     
     def _build_sidebar(self, main_layout: QHBoxLayout):
-        """构建左侧边栏导航 - 样式由 styles.qss 管理"""
+        """构建左侧边栏导航 - 符合QGIS原生开发标准"""
+        # QGIS原生标准：使用系统调色板，简洁设计
         sidebar = QWidget()
-        sidebar.setFixedWidth(230)
+        sidebar.setFixedWidth(180)  # QGIS标准侧边栏宽度（通常180-200px）
         sidebar.setObjectName("sidebar")
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
         
-        # 标题
-        header = QLabel("地址清洗 & 多源匹配插件")
+        # 标题区域（QGIS原生风格：简洁标题栏）
+        header = QLabel("地址清洗与多源匹配")
         header.setObjectName("sidebar_header")
         sidebar_layout.addWidget(header)
         
-        # 步骤列表
+        # 步骤列表（QGIS原生风格：使用QListWidget，符合QGIS面板标准）
         self.step_list = QListWidget()
         self.step_list.setObjectName("step_list")
-        steps = [
-            ("①", "Step1 文件导入"),
-            ("②", "Step2 字段映射与清洗"),
-            ("③", "Step3 标准化解析 & 关联"),
-            ("④", "Step4 匹配任务管理"),
-            ("⑤", "Step5 导出 & 日志"),
-        ]
-        for icon, text in steps:
-            item = QListWidgetItem(f"{icon} {text}")
-            self.step_list.addItem(item)
-        self.step_list.itemClicked.connect(self._on_step_clicked)
-        sidebar_layout.addWidget(self.step_list)
+        # QGIS原生设置：边框通过QSS样式移除，使用系统样式
+        self.step_list.setSpacing(1)  # QGIS标准间距
+        # QListWidget 默认就是单选模式，无需设置
         
-        # 底部提示
-        footer = QLabel("工作台模式：任意步骤可单独执行，支持增量数据多次处理。")
+        # 步骤定义（简洁文本，符合QGIS命名规范）
+        steps = [
+            "Step1 文件导入",
+            "Step2 字段映射与清洗",
+            "Step3 标准化解析 & 关联",
+            "Step4 匹配任务管理",
+            "Step5 导出 & 日志",
+        ]
+        for text in steps:
+            item = QListWidgetItem(text)
+            self.step_list.addItem(item)
+        
+        self.step_list.itemClicked.connect(self._on_step_clicked)
+        sidebar_layout.addWidget(self.step_list, 1)  # 占据剩余空间
+        
+        # 底部提示（QGIS原生风格：小字体，次要信息）
+        footer = QLabel("工作台模式：任意步骤可单独执行")
         footer.setObjectName("sidebar_footer")
         footer.setWordWrap(True)
         sidebar_layout.addWidget(footer)
@@ -104,34 +114,31 @@ class MatchDialog(QDialog):
     
     def _build_main_content(self, main_layout: QHBoxLayout):
         """构建右侧主内容区"""
-        # 使用垂直分割器：上方是主内容，下方是日志面板
-        # 安全获取 Vertical 方向
-        try:
-            if hasattr(Qt, 'Orientation') and hasattr(Qt.Orientation, 'Vertical'):
-                orientation = Qt.Orientation.Vertical
-            elif hasattr(Qt, 'Vertical'):
-                orientation = Qt.Vertical
-            else:
-                # 使用数值常量：Vertical = 1
-                orientation = 1
-        except (AttributeError, TypeError):
-            orientation = 1
-        
-        main_splitter = QSplitter(orientation)
-        main_splitter.setObjectName("main_splitter")
-        
-        # 上方主内容区
+        # 使用垂直布局：上方是主内容，下方固定日志面板
         main_widget = QWidget()
         main_widget.setObjectName("main_content")
+        # 设置尺寸策略，让主内容区能够水平扩展
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        try:
+            if hasattr(QSizePolicy, 'Policy') and hasattr(QSizePolicy.Policy, 'Expanding'):
+                expanding = QSizePolicy.Policy.Expanding
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+            else:
+                expanding = 7  # Expanding = 7
+            main_widget.setSizePolicy(expanding, expanding)
+        except (AttributeError, TypeError):
+            main_widget.setSizePolicy(7, 7)  # Expanding, Expanding
+        
         main_content_layout = QVBoxLayout(main_widget)
         main_content_layout.setContentsMargins(0, 0, 0, 0)
         main_content_layout.setSpacing(0)
         
-        # 标题栏
+        # 标题栏（左右边距与内容区对齐）
         header_widget = QWidget()
         header_widget.setObjectName("header_widget")
         header_layout = QVBoxLayout(header_widget)
-        header_layout.setContentsMargins(10, 10, 10, 10)
+        header_layout.setContentsMargins(16, 10, 16, 10)  # 左右16px与内容区对齐
         
         self.header_title = QLabel("Step2 字段映射与清洗")
         self.header_title.setObjectName("header_title")
@@ -143,22 +150,42 @@ class MatchDialog(QDialog):
         
         main_content_layout.addWidget(header_widget)
         
-        # 全局配置组件（在所有步骤中都可见，可折叠）
-        self.global_config_section = CollapsibleSection("数据范围与目录（全局配置）", expanded=True)
+        # 全局配置组件（在所有步骤中都可见，可折叠，默认收起）
+        # 左右边距与内容区对齐（16px）
+        self.global_config_section = CollapsibleSection("全局配置", expanded=False)
         self.global_config = GlobalConfigWidget(self, self._log)
         self.global_config.region_changed.connect(self._on_region_changed)
         # 移除 GlobalConfigWidget 的 QGroupBox，直接使用内容
         self.global_config_section.add_widget(self.global_config)
-        main_content_layout.addWidget(self.global_config_section)
+        # 添加边距，使其与滚动区内容对齐（统一16px）
+        global_config_container = QWidget()
+        global_config_layout = QVBoxLayout(global_config_container)
+        global_config_layout.setContentsMargins(16, 0, 16, 0)  # 左右16px与内容区对齐
+        global_config_layout.addWidget(self.global_config_section)
+        main_content_layout.addWidget(global_config_container)
         
         # 内容滚动区
         scroll = QScrollArea()
         scroll.setObjectName("content_scroll")
         scroll.setWidgetResizable(True)
+        # 滚动条策略：QScrollArea 默认就是 ScrollBarAsNeeded，不需要显式设置
         
         self.content_widget = QWidget()
+        # 设置尺寸策略，让内容区域能够扩展填满可用空间
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        try:
+            if hasattr(QSizePolicy, 'Policy') and hasattr(QSizePolicy.Policy, 'Expanding'):
+                expanding = QSizePolicy.Policy.Expanding
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+            else:
+                expanding = 7  # Expanding = 7
+            self.content_widget.setSizePolicy(expanding, expanding)
+        except (AttributeError, TypeError):
+            self.content_widget.setSizePolicy(7, 7)  # Expanding, Expanding
+        
         self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(12, 12, 12, 12)
+        self.content_layout.setContentsMargins(16, 12, 16, 12)  # 左右16px统一对齐
         self.content_layout.setSpacing(12)
         
         # 创建所有步骤的内容（初始隐藏）
@@ -183,20 +210,38 @@ class MatchDialog(QDialog):
             widget.setVisible(False)
         
         scroll.setWidget(self.content_widget)
-        main_content_layout.addWidget(scroll)
+        # 关键修复：当QScrollArea的widgetResizable为True时，需要确保内容widget能够扩展
+        # 通过监听QScrollArea的viewport resize事件，动态设置content_widget的最小宽度
+        def update_content_width():
+            """动态更新content_widget的宽度，确保填满QScrollArea"""
+            try:
+                viewport = scroll.viewport()
+                if viewport and viewport.width() > 0:
+                    self.content_widget.setMinimumWidth(viewport.width())
+            except Exception:
+                pass
         
-        main_splitter.addWidget(main_widget)
+        # 监听QScrollArea的viewport resize事件
+        scroll.viewport().installEventFilter(self)
+        # 存储更新函数和scroll引用
+        self._update_content_width = update_content_width
+        self._content_scroll = scroll
+        # 初始设置一次
+        from qgis.PyQt.QtCore import QTimer
+        QTimer.singleShot(100, update_content_width)
         
-        # 下方日志面板（公共组件，所有步骤可见）
-        log_box = QGroupBox("执行日志（所有步骤）")
+        main_content_layout.addWidget(scroll, 1)  # 设置拉伸因子，让滚动区占据剩余空间
+        
+        # 下方日志面板（固定高度，不可拖动）
+        log_box = QGroupBox("执行日志")
         log_box.setObjectName("log_panel_group")
         log_layout = QVBoxLayout(log_box)
-        log_layout.setContentsMargins(8, 8, 8, 8)
+        log_layout.setContentsMargins(16, 8, 16, 8)  # 左右16px与内容区对齐
         
         self.log_panel = QTextEdit()
         self.log_panel.setObjectName("log_panel")
         self.log_panel.setReadOnly(True)
-        self.log_panel.setMinimumHeight(150)
+        self.log_panel.setFixedHeight(200)  # 固定高度，不可拖动
         # 设置字体以提高清晰度
         font = QFont("Consolas", 11)
         # 安全获取 Monospace StyleHint（兼容不同PyQt版本）
@@ -210,13 +255,10 @@ class MatchDialog(QDialog):
         self.log_panel.setFont(font)
         log_layout.addWidget(self.log_panel)
         
-        # 直接将 log_box 添加到 splitter（QGroupBox 本身就是 QWidget）
-        main_splitter.addWidget(log_box)
+        # 将日志面板添加到主布局底部（不拉伸）
+        main_content_layout.addWidget(log_box)
         
-        # 设置分割器比例（主内容区占70%，日志占30%）
-        main_splitter.setSizes([560, 240])
-        
-        main_layout.addWidget(main_splitter, 1)
+        main_layout.addWidget(main_widget, 1)
     
     def _apply_styles(self):
         """应用样式 - 通过 StyleManager 统一加载 QSS"""
@@ -238,10 +280,22 @@ class MatchDialog(QDialog):
         """区域改变时的回调"""
         if self.global_config is not None:
             try:
-            region_info = self.global_config.get_region_info()
-            self._log(f"[全局配置] 区域已切换：{region_info.get('province', '')} - {region_info.get('city', '')}", "info")
+                region_info = self.global_config.get_region_info()
+                self._log(f"[全局配置] 区域已切换：{region_info.get('province', '')} - {region_info.get('city', '')}", "info")
             except Exception as e:
                 self._log(f"[全局配置] 获取区域信息失败：{e}", "error")
+    
+    def eventFilter(self, obj, event):
+        """事件过滤器：监听QScrollArea的viewport resize事件，动态更新content_widget宽度"""
+        try:
+            # 检查是否是content_scroll的viewport的resize事件
+            if hasattr(self, '_content_scroll') and hasattr(self, '_update_content_width'):
+                if obj == self._content_scroll.viewport():
+                    if event.type() == QEvent.Resize:
+                        self._update_content_width()
+        except Exception:
+            pass
+        return super().eventFilter(obj, event)
     
     def _switch_step(self, step_num: int):
         """切换步骤"""
@@ -270,6 +324,18 @@ class MatchDialog(QDialog):
                 item.setSelected(True)
             else:
                 item.setSelected(False)
+        
+        # Step1显示时自动刷新数据源列表
+        # 注意：初始化时的刷新由Step1Widget.__init__中的延迟刷新处理（500ms）
+        # 这里只在切换步骤时刷新，避免初始化时重复刷新
+        # 使用标志位判断是否为初始化阶段
+        if step_num == 1 and hasattr(self.step_widgets[1], '_on_refresh'):
+            # 延迟刷新，确保不与初始化刷新冲突
+            from qgis.PyQt.QtCore import QTimer
+            # 如果是在初始化阶段（_current_step还未设置或刚设置为1），跳过
+            # 否则延迟刷新（切换步骤时）
+            if hasattr(self, '_initialized') and self._initialized:
+                QTimer.singleShot(100, lambda: self.step_widgets[1]._on_refresh() if hasattr(self.step_widgets[1], '_on_refresh') else None)
     
     def _on_step_clicked(self, item: QListWidgetItem):
         """步骤点击事件"""
@@ -301,8 +367,8 @@ class MatchDialog(QDialog):
         """打开过滤条件模态对话框"""
         if self.filter_modal is not None:
             try:
-        self.filter_modal.set_target_name(target_name)
-        self.filter_modal.exec_()
+                self.filter_modal.set_target_name(target_name)
+                self.filter_modal.exec_()
             except Exception as e:
                 self._log(f"[错误] 打开过滤条件对话框失败：{e}", "error")
     
@@ -310,7 +376,7 @@ class MatchDialog(QDialog):
         """打开字段匹配对模态对话框"""
         if self.match_modal is not None:
             try:
-        self.match_modal.set_target_name(target_name)
-        self.match_modal.exec_()
+                self.match_modal.set_target_name(target_name)
+                self.match_modal.exec_()
             except Exception as e:
                 self._log(f"[错误] 打开字段匹配对话框失败：{e}", "error")

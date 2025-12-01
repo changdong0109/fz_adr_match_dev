@@ -55,27 +55,102 @@ class DataLoader:
             raise IOError(f"Failed to load Excel: {e}")
 
     @staticmethod
-    def load_shp(file_path: str) -> Tuple[List[Dict], List[str]]:
+    def load_shp(file_path: str) -> Tuple[List[Dict], str]:
         """
-        加载 SHP 文件（需要 fiona 或 shapefile）
+        加载 SHP 文件（使用 QGIS API）
         
+        SHP文件组成：
+        - .shp: 几何数据（点、线、面）
+        - .shx: 索引文件（快速访问）
+        - .dbf: 属性数据（表格数据，包含所有字段）
+        - .prj: 投影信息（可选）
+        - .cpg: 编码信息（可选，用于.dbf文件）
+        
+        QGIS会自动查找同名的.shx和.dbf文件，读取完整的SHP数据。
+        
+        Args:
+            file_path: .shp文件路径（QGIS会自动查找同名的.shx和.dbf）
+            
         Returns:
             (data_list, geometry_field_name)
+            - data_list: 包含属性数据和几何数据的字典列表
+            - geometry_field_name: 几何字段名（'geometry'）
         """
         try:
-            import fiona
+            from qgis.core import QgsVectorLayer, QgsFeature, QgsWkbTypes
+            from qgis.PyQt.QtCore import QVariant
+            
             data = []
             geometry_col_name = 'geometry'
             
-            with fiona.open(file_path) as src:
-                for feature in src:
-                    row = dict(feature['properties'])
-                    row[geometry_col_name] = feature['geometry']
-                    data.append(row)
+            # 确保文件路径存在
+            if not os.path.exists(file_path):
+                raise IOError(f"SHP文件不存在: {file_path}")
+            
+            # 检查必需的辅助文件是否存在
+            base_path = os.path.splitext(file_path)[0]
+            shx_path = base_path + '.shx'
+            dbf_path = base_path + '.dbf'
+            
+            if not os.path.exists(shx_path):
+                raise IOError(f"缺少索引文件: {shx_path}")
+            if not os.path.exists(dbf_path):
+                raise IOError(f"缺少属性文件: {dbf_path}")
+            
+            # 使用QGIS API加载SHP文件
+            # QGIS会自动处理.shx和.dbf文件
+            layer = QgsVectorLayer(file_path, "temp_layer", "ogr")
+            
+            if not layer.isValid():
+                raise IOError(f"无法加载SHP文件: {layer.error().message()}")
+            
+            # 获取坐标系信息
+            crs = layer.crs()
+            crs_str = crs.authid() if crs.isValid() else None
+            
+            # 获取所有字段名（来自.dbf文件）
+            fields = layer.fields()
+            field_names = [field.name() for field in fields]
+            
+            # 遍历所有要素
+            features = layer.getFeatures()
+            for feature in features:
+                row = {}
+                
+                # 获取属性数据（来自.dbf文件）
+                for field_name in field_names:
+                    value = feature.attribute(field_name)
+                    # 处理QVariant类型
+                    if isinstance(value, QVariant):
+                        if value.isNull():
+                            row[field_name] = None
+                        else:
+                            row[field_name] = value.value()
+                    else:
+                        row[field_name] = value
+                
+                # 获取几何数据（来自.shp文件）
+                geom = feature.geometry()
+                if geom and not geom.isEmpty():
+                    # 转换为WKT格式
+                    wkt_str = geom.asWkt()
+                    row[geometry_col_name] = wkt_str
+                else:
+                    row[geometry_col_name] = ''
+                
+                # 如果有坐标系信息，也保存
+                if crs_str:
+                    row['crs'] = crs_str
+                
+                data.append(row)
+            
+            if not data:
+                raise ValueError(f"SHP文件为空或没有要素: {file_path}")
             
             return data, geometry_col_name
-        except ImportError:
-            raise ImportError("fiona not installed. Run: pip install fiona")
+            
+        except ImportError as e:
+            raise ImportError(f"QGIS API不可用: {e}")
         except Exception as e:
             raise IOError(f"Failed to load SHP: {e}")
 
@@ -131,3 +206,75 @@ class DataLoader:
         
         except Exception as e:
             raise Exception(f"Error loading {file_path}: {e}")
+    
+    @staticmethod
+    def save_to_csv(data: List[Dict], output_path: str, encoding: str = 'utf-8-sig'):
+        """
+        将数据保存为 CSV 文件
+        
+        Args:
+            data: 数据列表（List[Dict]）
+            output_path: 输出文件路径
+            encoding: 编码格式（默认 utf-8-sig，支持 Excel 打开）
+        """
+        if not data:
+            raise ValueError("数据为空，无法保存")
+        
+        try:
+            import csv
+            # 获取所有字段名（合并所有记录的键）
+            all_fields = set()
+            for row in data:
+                all_fields.update(row.keys())
+            fieldnames = sorted(all_fields)
+            
+            # 确保输出目录存在
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # 写入 CSV
+            with open(output_path, 'w', encoding=encoding, newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for row in data:
+                    # 处理 None 值和非字符串值
+                    clean_row = {}
+                    for key in fieldnames:
+                        value = row.get(key)
+                        if value is None:
+                            clean_row[key] = ''
+                        elif isinstance(value, (dict, list)):
+                            # 复杂对象转为 JSON 字符串
+                            clean_row[key] = json.dumps(value, ensure_ascii=False)
+                        else:
+                            # 直接转换为字符串（WKT格式的几何数据已经是字符串）
+                            clean_row[key] = str(value)
+                    writer.writerow(clean_row)
+        except Exception as e:
+            raise IOError(f"Failed to save CSV: {e}")
+    
+    @staticmethod
+    def convert_to_csv(input_path: str, output_path: str, encoding: str = 'utf-8-sig') -> str:
+        """
+        将任意支持格式的文件转换为 CSV
+        
+        Args:
+            input_path: 输入文件路径（Excel/SHP/CSV等）
+            output_path: 输出 CSV 文件路径
+            encoding: 输出编码格式
+            
+        Returns:
+            输出文件路径
+        """
+        # 加载数据
+        data, geometry_col = DataLoader.auto_load(input_path)
+        
+        # 如果数据为空，抛出异常
+        if not data:
+            raise ValueError(f"文件 {input_path} 没有数据")
+        
+        # 保存为 CSV
+        DataLoader.save_to_csv(data, output_path, encoding)
+        
+        return output_path

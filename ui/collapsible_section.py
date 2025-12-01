@@ -78,6 +78,7 @@ class CollapsibleSection(QWidget):
         header_layout.setSpacing(6)
 
         self._toggle_btn = QToolButton(header)
+        self._toggle_btn.setObjectName('collapsible_section_toggle_btn')  # 设置 objectName，通过 QSS 应用样式
         # Some Qt bindings used by QGIS may not expose ToolButtonIconOnly.
         # Guard the call to avoid AttributeError; if unavailable, skip it.
         try:
@@ -158,36 +159,8 @@ class CollapsibleSection(QWidget):
         # Set initial state
         self._content.setVisible(expanded)
 
-        # Basic style - keeps a subtle separation
-        self._apply_default_style()
-
-    def _apply_default_style(self):
-        # Keep styling minimal so it blends with QGIS native look,
-        # but ensure there is a visible boundary for each section.
-        style = """
-        QFrame#collapsible_section_frame { 
-            border: 1px solid #d0d0d0; 
-            border-radius: 4px; 
-            background: #ffffff; 
-        }
-        QLabel#collapsible_section_title { 
-            font-weight: 600;
-            color: #000000;
-            font-size: 14px;
-        }
-        QToolButton {
-            border: none;
-            background: transparent;
-        }
-        QToolButton:hover {
-            background-color: #f0f0f0;
-            border-radius: 3px;
-        }
-        """
-        try:
-            self.setStyleSheet(style)
-        except Exception:
-            pass
+        # 样式通过 QSS 文件统一管理，不再使用内联样式
+        # 所有样式定义在 ui/styles.qss 中，通过 objectName 应用
 
     def add_widget(self, widget: QWidget):
         """Add a widget to the content area."""

@@ -33,4 +33,20 @@ class BaseStepWidget(QWidget):
             if hasattr(self.task_manager, 'set_log_callback'):
                 self.task_manager.set_log_callback(self.log_callback)
         return self.task_manager
+    
+    def get_step1_data_sources(self):
+        """
+        获取 Step1 的数据源（通过父对话框查找 Step1Widget）
+        
+        Returns:
+            Step1 的 data_sources 字典，如果找不到则返回 None
+        """
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'step_widgets'):
+                step1 = parent.step_widgets.get(1)
+                if step1 and hasattr(step1, 'data_sources'):
+                    return step1.data_sources
+            parent = parent.parent()
+        return None
 

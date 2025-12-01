@@ -347,3 +347,169 @@ QTextEdit#log_panel {
     padding: 8px 10px;
 }
 
+/* ========== Step2 样式 ========== */
+/* Step2 文件列表表格 */
+QTableWidget#step2_cfg_progress_table {
+    font-size: 13px;
+}
+
+/* Step2 字段组合滚动区域 */
+QScrollArea#step2_field_combos_scroll {
+    border: 1px dashed #d1d5db;
+    border-radius: 4px;
+    background: #f9fafb;
+}
+
+/* Step2 标签样式 */
+QLabel#step2_tip_label {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+QLabel#step2_current_file_label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+/* Step2 字段组合框架 */
+QFrame#step2_combo_frame {
+    border: 1px dashed #d1d5db;
+    border-radius: 4px;
+    padding: 8px;
+    background: #f9fafb;
+    margin-bottom: 8px;
+}
+
+/* Step2 组合标题标签 */
+QLabel#step2_combo_title_label {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Step2 字段表格 */
+QTableWidget#step2_field_table {
+    font-size: 12px;
+}
+
+/* Step2 按钮样式 */
+QPushButton#step2_btn_refresh {
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+QPushButton#step2_btn_add_combo {
+    padding: 6px 16px;
+    font-size: 13px;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    min-width: 120px;
+}
+
+QPushButton#step2_btn_add_combo:hover {
+    background-color: #1d4ed8;
+}
+
+QPushButton#step2_btn_delete_combo {
+    padding: 3px 7px;
+    font-size: 11px;
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 3px;
+}
+
+QPushButton#step2_btn_delete_combo:hover {
+    background-color: #dc2626;
+}
+
+QPushButton#step2_btn_add_field {
+    font-size: 13px;
+    padding: 6px 16px;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    min-width: 120px;
+}
+
+QPushButton#step2_btn_add_field:hover {
+    background-color: #1d4ed8;
+}
+
+QPushButton#step2_btn_field_up,
+QPushButton#step2_btn_field_down {
+    font-size: 12px;
+    padding: 4px 10px;
+    min-width: 50px;
+    border: 1px solid #d0d0d0;
+    background-color: #f0f0f0;
+    color: #000000;
+    border-radius: 3px;
+}
+
+QPushButton#step2_btn_field_up:hover,
+QPushButton#step2_btn_field_down:hover {
+    background-color: #e0e0e0;
+}
+
+QPushButton#step2_btn_field_delete {
+    font-size: 12px;
+    padding: 4px 10px;
+    min-width: 50px;
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 3px;
+}
+
+QPushButton#step2_btn_field_delete:hover {
+    background-color: #dc2626;
+}
+
+QPushButton#step2_btn_save_combo {
+    padding: 6px 16px;
+    font-size: 13px;
+    background-color: #15803d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    min-width: 120px;
+}
+
+QPushButton#step2_btn_save_combo:hover {
+    background-color: #166534;
+}
+
+/* ========== CollapsibleSection 样式 ========== */
+/* 可折叠区域的样式 - 符合文档要求：所有样式在 QSS 中统一管理 */
+QFrame#collapsible_section_frame {
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background: #ffffff;
+}
+
+QLabel#collapsible_section_title {
+    font-weight: 600;
+    color: #000000;
+    font-size: 14px;
+}
+
+QToolButton#collapsible_section_toggle_btn {
+    border: none;
+    background: transparent;
+}
+
+QToolButton#collapsible_section_toggle_btn:hover {
+    background-color: #f0f0f0;
+    border-radius: 3px;
+}
+

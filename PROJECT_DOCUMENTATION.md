@@ -113,22 +113,39 @@
 
 ## 架构设计
 
-### 整体架构原则
+### 整体架构概述
 
-1. **分层架构**: UI层 → Core层 → Utils层
-2. **单一职责**: 每个模块只负责一个明确的功能
-3. **依赖注入**: 通过构造函数注入共享资源
-4. **关注点分离**: UI与业务逻辑完全分离
+本项目采用**分层架构**设计，遵循**单一职责**、**依赖注入**、**关注点分离**等核心原则。
 
-### 依赖方向
-
+**架构层次**:
 ```
-ui/ → core/ → utils/
+┌─────────────────────────────────────────┐
+│          UI层 (ui/)                     │
+│  - 用户界面组件                          │
+│  - 用户交互处理                         │
+│  - 调用Core层业务逻辑                    │
+└──────────────┬──────────────────────────┘
+               │ 依赖
+               ▼
+┌─────────────────────────────────────────┐
+│        Core层 (core/)                    │
+│  - 业务逻辑算法                          │
+│  - 数据处理                              │
+│  - 无UI依赖                              │
+└──────────────┬──────────────────────────┘
+               │ 依赖
+               ▼
+┌─────────────────────────────────────────┐
+│       Utils层 (utils/)                   │
+│  - 通用工具函数                          │
+│  - 独立模块                              │
+└─────────────────────────────────────────┘
 ```
 
-- **UI层** 可以调用 **Core层** 和 **Utils层**
-- **Core层** 可以调用 **Utils层**，但不能调用 **UI层**
-- **Utils层** 应该是独立的，不依赖其他层
+**依赖规则**:
+- ✅ **UI层** → **Core层** → **Utils层**（单向依赖）
+- ❌ **Core层** 不能依赖 **UI层**
+- ❌ **Utils层** 不能依赖其他层
 
 ### 目录结构
 
@@ -194,35 +211,45 @@ fz_adr_match_dev/
     # 注意：历史配置保存在 QGIS QSettings 中，不在此目录
 ```
 
-### 架构设计原则
+### 核心设计原则
 
 #### 1. 单一职责原则
 
-- **MatchDialog**: 只负责布局和协调
-  - 侧边栏导航
-  - 主内容区布局
-  - 步骤切换逻辑
-  - 样式加载（通过 StyleManager）
-  - 日志统一入口
-  - **代码行数**: ~298行
+每个模块只负责一个明确的功能，职责清晰，边界明确。
 
-- **Step Widgets**: 各自负责自己的UI和业务逻辑
+**模块职责划分**:
+- **MatchDialog** (`ui/match_dialog.py`): 只负责布局和协调
+  - 侧边栏导航、主内容区布局、步骤切换逻辑
+  - 样式加载（通过 StyleManager）、日志统一入口
+  - **不负责**: 具体业务逻辑、数据处理
+  
+- **Step Widgets** (`ui/steps/step*_widget.py`): 各自负责自己的UI和业务逻辑调用
   - 所有 Step Widgets 继承自 `BaseStepWidget`
-  - 每个 Widget 独立管理自己的 UI 和业务逻辑
+  - 每个 Widget 独立管理自己的 UI 和业务逻辑调用
   - 通过依赖注入接收共享资源（log_callback, task_manager）
-
-- **TaskManager**: 统一管理所有任务的进度和定时器
+  - **不负责**: 具体业务算法实现（应调用Core层）
+  
+- **Core层模块** (`core/*.py`): 纯业务逻辑，无UI依赖
+  - `DataLoader`: 数据加载和转换
+  - `FieldDetector`: 字段检测和推断
+  - `MatchEngine`: 匹配算法
+  - **不负责**: UI组件、用户交互
+  
+- **TaskManager** (`ui/widgets/task_manager.py`): 统一管理所有任务的进度和定时器
   - 独立模块，职责单一
   - 通过依赖注入提供给 Step Widgets
-
-- **StyleManager**: 统一管理所有样式（QSS加载）
+  
+- **StyleManager** (`ui/styles.py`): 统一管理所有样式（QSS加载）
   - 独立模块，职责单一
   - 所有样式定义在 `styles.qss` 中
 
 #### 2. 依赖注入
 
-**Step Widgets 构造函数**:
+通过构造函数注入共享资源，避免全局变量和紧耦合。
+
+**实现方式**:
 ```python
+# Step Widgets 构造函数签名
 # Step1-3, Step5
 def __init__(self, parent=None, log_callback=None, task_manager=None):
 
@@ -231,53 +258,106 @@ def __init__(self, parent=None, log_callback=None, task_manager=None,
              open_filter_modal=None, open_match_modal=None):
 ```
 
-**共享资源注入**:
-- `log_callback`: 通过构造函数注入
-- `task_manager`: 通过构造函数注入
-- `模态对话框回调`: Step4 通过构造函数注入
+**注入的资源**:
+- `log_callback`: 日志回调函数，统一由 MatchDialog 提供
+- `task_manager`: 任务管理器实例，统一由 MatchDialog 创建
+- `模态对话框回调`: Step4 专用，由 MatchDialog 提供
+
+**优势**:
+- 解耦：Step Widgets 不直接依赖 MatchDialog
+- 可测试：可以轻松注入 mock 对象进行测试
+- 可扩展：新增共享资源只需修改构造函数签名
 
 #### 3. 通信机制
 
-- **日志通信**: 通过回调函数 `log_callback(msg, level)`
-  - 所有 Step Widgets 通过 `self._log()` 方法（继承自 BaseStepWidget）记录日志
-  - 日志统一由 MatchDialog 的 `_log()` 方法处理
+模块间通过明确的接口进行通信，避免隐式依赖。
 
-- **任务管理**: 通过共享的 `TaskManager` 实例
-  - 所有 Step Widgets 通过 `self.get_task_manager()` 获取 TaskManager
-  - TaskManager 由 MatchDialog 创建并注入
+**日志通信**:
+- 接口：`log_callback(msg: str, level: str)`
+- 实现：所有 Step Widgets 通过 `self._log()` 方法（继承自 BaseStepWidget）记录日志
+- 处理：日志统一由 MatchDialog 的 `_log()` 方法处理并显示
 
-- **模态对话框**: Step4 通过回调函数打开
-  - Step4 通过 `open_filter_modal` 和 `open_match_modal` 回调打开模态对话框
-  - 回调由 MatchDialog 提供
+**任务管理**:
+- 接口：`TaskManager` 类提供 `start_task()`, `pause_task()`, `stop_task()` 等方法
+- 实现：所有 Step Widgets 通过 `self.get_task_manager()` 获取 TaskManager
+- 管理：TaskManager 由 MatchDialog 创建并注入
+
+**数据共享**:
+- Step Widgets 之间通过父对话框（MatchDialog）共享数据
+- 例如：Step2 通过 `get_step1_data_sources()` 获取 Step1 的数据源
 
 #### 4. 样式管理
 
-- **样式定义**: `ui/styles.qss`（统一管理所有样式）
-- **样式加载**: 通过 `StyleManager.load_qss()` 统一加载
-- **样式应用**: 通过 `objectName` 和类选择器
-  - 所有组件通过 `setObjectName()` 设置标识
-  - QSS 通过选择器应用样式
-- **无内联样式**: 所有样式都在 QSS 文件中，无 `setStyleSheet()` 调用
+所有样式统一在 QSS 文件中管理，通过 `objectName` 应用，禁止内联样式。
 
----
+**设计原则**:
+- **统一管理**: 所有样式定义在 `ui/styles.qss` 中
+- **自动加载**: 通过 `StyleManager.load_qss()` 统一加载
+- **标识应用**: 通过 `objectName` 和类选择器应用样式
+- **禁止内联**: 所有样式都在 QSS 文件中，禁止使用 `setStyleSheet()`
 
-## 代码组织指南
+**实现方式**:
 
-### Core层职责
+1. **代码中设置 objectName**:
+```python
+btn = QPushButton("新增组合")
+btn.setObjectName("step2_btn_add_combo")  # ✅ 设置 objectName
+```
 
-**应该放的内容**:
-- ✅ 数据处理算法
-- ✅ 业务规则和逻辑
+2. **QSS 文件中定义样式**:
+```css
+/* styles.qss */
+QPushButton#step2_btn_add_combo {
+    padding: 4px 8px;
+    font-size: 12px;
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 3px;
+}
+QPushButton#step2_btn_add_combo:hover {
+    background-color: #1d4ed8;
+}
+```
+
+3. **样式自动加载和应用**:
+- `MatchDialog.__init__()` 中调用 `self._apply_styles()`
+- `_apply_styles()` 调用 `StyleManager.load_qss()` 加载 QSS 文件
+- 通过 `self.setStyleSheet(qss)` 应用到整个对话框
+- 所有设置了 `objectName` 的组件自动应用对应样式
+
+**样式命名规范**:
+- 使用 `step{数字}_` 前缀标识步骤（如 `step2_`）
+- 使用组件类型前缀：`btn_`（按钮）、`label_`（标签）、`table_`（表格）
+- 使用下划线分隔单词，全小写（如 `step2_btn_add_combo`）
+
+**❌ 禁止的做法**:
+```python
+# ❌ 错误：使用内联样式
+btn.setStyleSheet("padding: 4px 8px; background-color: #2563eb;")
+```
+
+### 各层职责与实现规范
+
+基于分层架构原则，各层有明确的职责边界和实现规范。
+
+#### Core层职责 (`core/`)
+
+**职责**: 纯业务逻辑，无UI依赖
+
+**应该实现**:
+- ✅ 数据处理算法（数据加载、转换、清洗）
+- ✅ 业务规则和逻辑（匹配算法、字段检测）
 - ✅ 数据转换和清洗
-- ✅ 匹配算法
+- ✅ 匹配算法（精准/模糊/组合）
 - ✅ 字段检测和推断
 
-**不应该有**:
+**禁止实现**:
 - ❌ UI组件
 - ❌ Qt依赖
 - ❌ 界面相关代码
 
-**示例**:
+**实现示例**:
 ```python
 # ✅ 正确：纯业务逻辑
 class MatchEngine:
@@ -292,37 +372,51 @@ class MatchEngine:
         QMessageBox.information(...)  # ❌ 不应该
 ```
 
-### UI层职责
+#### UI层职责 (`ui/`)
 
-**应该放的内容**:
+**职责**: 用户界面和交互，调用Core层业务逻辑
+
+**应该实现**:
 - ✅ Qt Widget组件
-- ✅ UI布局和样式
+- ✅ UI布局和样式（通过 objectName + QSS）
 - ✅ 用户交互处理
-- ✅ 调用core层的业务逻辑
+- ✅ 调用Core层业务逻辑
 - ✅ UI工具函数（表格操作、布局辅助等）
 
-**不应该有**:
+**禁止实现**:
 - ❌ 纯业务算法
-- ❌ 数据处理逻辑（应调用core层）
+- ❌ 数据处理逻辑（应调用Core层）
+- ❌ 内联样式（`setStyleSheet()` 调用）
 
-**示例**:
+**实现示例**:
 ```python
-# ✅ 正确：UI层调用业务层
+# ✅ 正确：UI层调用Core层
 class Step2Widget(BaseStepWidget):
     def _on_clean_clicked(self):
-        from core.data_loader import DataLoader  # ✅ 调用core层
+        from core.data_loader import DataLoader  # ✅ 调用Core层
         data = DataLoader.load_csv(self.file_path)
         # 处理UI更新
         self._update_progress(50)
+    
+    def _build_ui(self):
+        # ✅ 正确：设置 objectName，样式在 QSS 中定义
+        btn = QPushButton("执行清洗")
+        btn.setObjectName("step2_btn_clean")
+        btn.clicked.connect(self._on_clean_clicked)
 
-# ❌ 错误：不应该在UI层实现业务逻辑
+# ❌ 错误：不应该在UI层实现业务逻辑，不应该使用内联样式
 class Step2Widget(BaseStepWidget):
     def _on_clean_clicked(self):
         # ❌ 不应该在这里实现数据清洗算法
         import csv
         with open(self.file_path) as f:
-            # 数据处理逻辑应该放在core层
+            # 数据处理逻辑应该放在Core层
             pass
+    
+    def _build_ui(self):
+        # ❌ 错误：不应该使用内联样式
+        btn = QPushButton("执行清洗")
+        btn.setStyleSheet("padding: 6px 12px;")  # ❌ 应该使用 objectName + QSS
 ```
 
 ### Utils层职责
@@ -861,6 +955,60 @@ def load_xxx(file_path: str) -> List[Dict]:
 
 ## 更新日志
 
+### 2024-12-XX - Step2页面架构规范修复（第三版）
+- **符合架构要求**：
+  - **移除所有内联样式**：移除了所有 `setStyleSheet()` 调用，符合文档要求"无内联样式：所有样式都在 QSS 文件中"
+  - **使用 objectName 标识**：为所有需要样式的组件设置了 `objectName`，通过 QSS 选择器应用样式
+  - **样式统一管理**：在 `styles.qss` 中添加了 Step2 的所有样式定义，包括：
+    - 文件列表表格样式
+    - 字段组合滚动区域样式
+    - 标签样式（提示标签、当前文件标签、组合标题标签）
+    - 字段组合框架样式
+    - 字段表格样式
+    - 按钮样式（刷新、新增组合、删除组合、新增字段、字段操作按钮等）
+
+### 2024-12-XX - Step2页面UI优化（第二版）
+- **UI布局优化**：
+  - **文件列表表格高度优化**：设置表格最小高度为200px（参考Step1），让表格能显示多行数据，不再挤在一起
+  - **文件列表列宽优化**：
+    - 当前列：固定宽度60px（单选按钮）
+    - 文件名列：自动扩展
+    - 字段组合数列：固定宽度100px
+    - 已配置列：固定宽度80px
+    - 清洗状态列：固定宽度100px
+  - **字段组合区域高度优化**：将滚动区域最小高度从400px增加到500px，让内容更清晰可见
+  - **字段组合表格优化**：
+    - 设置表格最小高度120px，确保内容可见
+    - 设置行高32px，让内容更清晰
+    - 优化列宽设置：
+      - 顺序列：固定宽度60px
+      - 角色名称列：固定宽度150px，确保能显示完整内容
+      - 字段列：固定宽度200px，确保下拉框能完整显示
+      - 操作列：固定宽度120px
+  - **字段组合块间距优化**：增加内边距（从6px到8px）和间距（从4px到8px），让内容更清晰
+
+### 2024-12-XX - Step2页面修复（第一版）
+- **核心功能修复**：
+  - **建立数据共享机制**：在 `BaseStepWidget` 中添加 `get_step1_data_sources()` 方法，让 Step2 能访问 Step1 的数据源
+  - **动态加载文件列表**：移除硬编码的示例数据，改为从 Step1 的 `data_sources` 动态生成文件列表
+  - **读取文件列名**：在 `DataLoader` 中添加 `get_file_columns()` 方法，支持读取 CSV/Excel 文件的列名
+  - **字段映射下拉框优化**：字段映射下拉框现在使用实际文件的列名，而不是硬编码的选项
+  - **自动刷新机制**：进入 Step2 时自动刷新文件列表（延迟500ms，确保 Step1 已初始化）
+  - **刷新按钮**：添加"刷新文件列表"按钮，支持手动刷新
+  
+- **代码改进**：
+  - 修改 `Step2Widget.__init__()`：移除硬编码数据，改为动态数据结构
+  - 添加 `_refresh_file_list()` 方法：从 Step1 获取数据源并更新文件列表
+  - 添加 `_update_cfg_progress_table()` 方法：动态更新文件配置进度表格
+  - 添加 `_get_file_columns()` 方法：获取文件列名（带缓存机制）
+  - 修改 `_create_combo_block()`：字段映射下拉框使用实际文件的列名
+  - 修改 `_add_field_row()`：新增字段行时使用实际文件的列名
+  - 修改 `_refresh_file_config_display()`：处理没有选中文件的情况
+  
+- **待完善功能**：
+  - 配置持久化：字段组合配置暂未保存到配置文件（将在后续版本实现）
+  - 文件状态同步：清洗状态需要与实际清洗结果同步（将在后续版本实现）
+
 ### 2024-12-XX - Step2页面问题分析总结
 - **问题分析**：对 Step2 页面进行了全面分析，发现以下问题：
   
@@ -1302,6 +1450,19 @@ fz_adr_match_dev/
    - 是否需要重构现有代码？
    - 是否符合现有的代码组织规则？
    - 是否会引入新的依赖或耦合？
+
+5. **检查架构设计文档**：
+   - 阅读"架构设计"部分，理解整体架构
+   - 阅读"代码组织指南"，了解各层职责
+   - 阅读"样式管理"部分，了解如何正确使用 QSS 和 objectName
+   - 查看现有代码示例，理解代码实现规范
+
+**样式管理代码实现检查清单**（修改UI时必须检查）:
+- [ ] 是否移除了所有 `setStyleSheet()` 调用？
+- [ ] 是否为所有需要样式的组件设置了 `objectName`？
+- [ ] 是否在 `styles.qss` 中添加了对应的样式定义？
+- [ ] 样式命名是否符合规范（`step{数字}_` 前缀）？
+- [ ] 是否参考了文档中的代码示例？
 
 **❌ 错误示例（堆砌式开发）**：
 ```

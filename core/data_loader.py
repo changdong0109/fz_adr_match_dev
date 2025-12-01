@@ -278,3 +278,49 @@ class DataLoader:
         DataLoader.save_to_csv(data, output_path, encoding)
         
         return output_path
+    
+    @staticmethod
+    def get_file_columns(file_path: str) -> List[str]:
+        """
+        读取文件的列名（不加载完整数据，只读取表头）
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            列名列表
+        """
+        ext = Path(file_path).suffix.lower()
+        
+        try:
+            if ext == '.csv':
+                # 读取 CSV 文件的表头
+                import csv
+                for encoding in ['utf-8', 'gbk', 'gb2312', 'latin-1']:
+                    try:
+                        with open(file_path, 'r', encoding=encoding) as f:
+                            reader = csv.reader(f)
+                            header = next(reader)
+                            return [col.strip() for col in header if col.strip()]
+                    except (UnicodeDecodeError, StopIteration):
+                        continue
+                raise IOError(f"Cannot read CSV header with any supported encoding")
+            
+            elif ext in ['.xlsx', '.xls']:
+                # 读取 Excel 文件的表头
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                    sheet = wb.active
+                    # 读取第一行作为表头
+                    header = [cell.value for cell in sheet[1] if cell.value]
+                    wb.close()
+                    return [str(col).strip() for col in header if col]
+                except ImportError:
+                    raise ImportError("openpyxl not installed. Run: pip install openpyxl")
+            
+            else:
+                raise ValueError(f"Unsupported file format for column reading: {ext}")
+        
+        except Exception as e:
+            raise IOError(f"Failed to read file columns: {e}")

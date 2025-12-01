@@ -2,11 +2,12 @@
 Step4: 匹配任务管理Widget
 左右分栏布局：左侧任务组列表 + 右侧任务组配置详情
 """
+import os
 from typing import Callable, Dict, Optional, List
 from qgis.PyQt.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QCheckBox,
-    QProgressBar, QHeaderView, QTextEdit, QSplitter,
+    QProgressBar, QHeaderView, QSplitter, QAbstractItemView,
     QListWidget, QListWidgetItem, QFrame, QGroupBox
 )
 from qgis.PyQt.QtGui import QColor
@@ -27,9 +28,61 @@ class Step4Widget(BaseStepWidget):
         self.global_config = global_config
         self._task_groups: List[Dict] = []
         self._current_group_idx = -1
+        self._available_files: List[str] = []  # 可用文件列表
         super().__init__(parent, log_callback, task_manager)
         self._build_ui()
+        self._load_available_files()
         self._load_demo_data()
+    
+    def _get_global_config(self):
+        """获取全局配置组件"""
+        if self.global_config:
+            return self.global_config
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'global_config'):
+                return parent.global_config
+            parent = parent.parent()
+        return None
+    
+    def _load_available_files(self):
+        """从全局配置加载可用文件列表"""
+        self._available_files = []
+        
+        global_config = self._get_global_config()
+        if not global_config:
+            self._log("[Step4] 未获取到全局配置", "warning")
+            return
+        
+        region_info = global_config.get_region_info()
+        customer_folder = region_info.get('customer_folder', '')
+        shp_folder = region_info.get('shp_folder', '')
+        
+        # 扫描客户数据文件夹
+        if customer_folder and os.path.isdir(customer_folder):
+            for f in os.listdir(customer_folder):
+                if f.lower().endswith(('.csv', '.xlsx', '.xls')):
+                    self._available_files.append(f)
+        
+        # 扫描SHP数据文件夹
+        if shp_folder and os.path.isdir(shp_folder):
+            for f in os.listdir(shp_folder):
+                if f.lower().endswith(('.csv', '.xlsx', '.xls')):
+                    self._available_files.append(f)
+        
+        self._log(f"[Step4] 加载可用文件: {len(self._available_files)} 个", "info")
+        
+        # 更新下拉框
+        self._update_file_combos()
+    
+    def _update_file_combos(self):
+        """更新源表和目标表的下拉框选项"""
+        if hasattr(self, 'combo_src'):
+            current_src = self.combo_src.currentText()
+            self.combo_src.clear()
+            self.combo_src.addItems(self._available_files)
+            if current_src in self._available_files:
+                self.combo_src.setCurrentText(current_src)
     
     def _build_ui(self):
         """构建UI - 左右分栏"""
@@ -43,8 +96,8 @@ class Step4Widget(BaseStepWidget):
         
         # 左侧面板：任务组列表
         left_panel = self._build_left_panel()
-        left_panel.setMinimumWidth(220)
-        left_panel.setMaximumWidth(320)
+        left_panel.setMinimumWidth(240)
+        left_panel.setMaximumWidth(340)
         splitter.addWidget(left_panel)
         
         # 右侧面板：任务组配置详情
@@ -52,7 +105,7 @@ class Step4Widget(BaseStepWidget):
         splitter.addWidget(right_panel)
         
         # 设置初始比例
-        splitter.setSizes([250, 750])
+        splitter.setSizes([280, 720])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         
@@ -132,25 +185,31 @@ class Step4Widget(BaseStepWidget):
         src_group = QGroupBox("源表配置 (From)")
         src_group.setObjectName("step4_group")
         src_layout = QVBoxLayout(src_group)
-        src_layout.setSpacing(8)
+        src_layout.setSpacing(10)
         
         # 源表选择行
         src_row = QHBoxLayout()
-        src_row.addWidget(QLabel("源表:"))
+        lbl_src = QLabel("源表:")
+        lbl_src.setMinimumWidth(70)
+        src_row.addWidget(lbl_src)
         self.combo_src = NoWheelComboBox()
         self.combo_src.setObjectName("step4_combo")
-        self.combo_src.setMinimumWidth(250)
+        self.combo_src.setMinimumHeight(32)
         src_row.addWidget(self.combo_src, 1)
         src_layout.addLayout(src_row)
         
         # 过滤条件行
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("过滤条件:"))
+        lbl_filter = QLabel("过滤条件:")
+        lbl_filter.setMinimumWidth(70)
+        filter_row.addWidget(lbl_filter)
         self.lbl_src_filter = QLabel("无")
         self.lbl_src_filter.setObjectName("step4_filter_status")
+        self.lbl_src_filter.setMinimumHeight(28)
         filter_row.addWidget(self.lbl_src_filter, 1)
         btn_src_filter = QPushButton("设置过滤条件...")
         btn_src_filter.setObjectName("step4_btn_config")
+        btn_src_filter.setMinimumHeight(28)
         btn_src_filter.clicked.connect(self._open_src_filter_dialog)
         filter_row.addWidget(btn_src_filter)
         src_layout.addLayout(filter_row)
@@ -161,28 +220,31 @@ class Step4Widget(BaseStepWidget):
         tgt_group = QGroupBox("目标表列表 (To, 按优先级排序)")
         tgt_group.setObjectName("step4_group")
         tgt_layout = QVBoxLayout(tgt_group)
-        tgt_layout.setSpacing(8)
+        tgt_layout.setSpacing(10)
         
-        # 目标表表格
-        self.tgt_table = QTableWidget(0, 5)
+        # 目标表表格 - 6列
+        self.tgt_table = QTableWidget(0, 6)
         self.tgt_table.setObjectName("step4_target_table")
         self.tgt_table.setHorizontalHeaderLabels([
-            "序", "目标表", "过滤条件", "匹配字段", "操作"
+            "序", "目标表", "过滤条件", "匹配字段", "匹配方式说明", "操作"
         ])
         self.tgt_table.verticalHeader().setVisible(False)
-        self.tgt_table.verticalHeader().setDefaultSectionSize(36)
-        self.tgt_table.setMinimumHeight(150)
+        self.tgt_table.verticalHeader().setDefaultSectionSize(40)
+        self.tgt_table.setMinimumHeight(180)
+        self.tgt_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.tgt_table.setAlternatingRowColors(True)
         
         header = self.tgt_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(0, 35)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 80)
+        header.resizeSection(2, 70)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 80)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(4, 100)
+        header.resizeSection(3, 70)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(5, 90)
         
         tgt_layout.addWidget(self.tgt_table)
         
@@ -196,9 +258,12 @@ class Step4Widget(BaseStepWidget):
         
         # ===== 备注区域 =====
         remark_row = QHBoxLayout()
-        remark_row.addWidget(QLabel("备注:"))
+        lbl_remark = QLabel("备注:")
+        lbl_remark.setMinimumWidth(70)
+        remark_row.addWidget(lbl_remark)
         self.txt_remark = QLineEdit()
         self.txt_remark.setObjectName("step4_remark")
+        self.txt_remark.setMinimumHeight(32)
         self.txt_remark.setPlaceholderText("输入任务组说明...")
         remark_row.addWidget(self.txt_remark, 1)
         config_layout.addLayout(remark_row)
@@ -209,16 +274,19 @@ class Step4Widget(BaseStepWidget):
         
         btn_save = QPushButton("保存配置")
         btn_save.setObjectName("step4_btn_save")
+        btn_save.setMinimumHeight(36)
         btn_save.clicked.connect(self._save_current_config)
         btn_row.addWidget(btn_save)
         
         btn_run = QPushButton("执行任务")
         btn_run.setObjectName("step4_btn_run")
+        btn_run.setMinimumHeight(36)
         btn_run.clicked.connect(self._run_current_group)
         btn_row.addWidget(btn_run)
         
         btn_delete = QPushButton("删除任务组")
         btn_delete.setObjectName("step4_btn_delete")
+        btn_delete.setMinimumHeight(36)
         btn_delete.clicked.connect(self._delete_current_group)
         btn_row.addWidget(btn_delete)
         
@@ -236,16 +304,27 @@ class Step4Widget(BaseStepWidget):
     
     def _load_demo_data(self):
         """加载示例数据"""
+        # 如果没有从全局配置加载到文件，使用示例数据
+        if not self._available_files:
+            self._available_files = [
+                "客户采集数据_2025Q1.csv",
+                "补录地址库.csv",
+                "小区地址库.xlsx",
+                "门牌库_市政.csv",
+                "GIS_小区点位.csv"
+            ]
+            self._update_file_combos()
+        
         self._task_groups = [
             {
                 "name": "客户地址匹配门牌库",
                 "enabled": True,
-                "source": "客户采集数据_2025Q1.csv",
+                "source": self._available_files[0] if self._available_files else "",
                 "source_filter": "",
                 "remark": "先门牌库精确匹配，未命中用小区库兜底",
                 "targets": [
-                    {"table": "门牌库_市政.csv", "filter": "", "match_fields": "std_addr ↔ mp_addr"},
-                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": "community ↔ name"}
+                    {"table": "门牌库_市政.csv", "filter": "", "match_fields": "2对", "match_desc": "std_addr ↔ mp_addr (模糊)"},
+                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": "1对", "match_desc": "community ↔ name (精确)"}
                 ],
                 "status": "待执行",
                 "progress": 0
@@ -257,21 +336,13 @@ class Step4Widget(BaseStepWidget):
                 "source_filter": "",
                 "remark": "",
                 "targets": [
-                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": ""},
-                    {"table": "GIS_小区点位.shp", "filter": "", "match_fields": ""}
+                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": "", "match_desc": ""},
+                    {"table": "GIS_小区点位.csv", "filter": "", "match_fields": "", "match_desc": ""}
                 ],
                 "status": "待执行",
                 "progress": 0
             }
         ]
-        
-        # 初始化源表下拉框选项
-        self.combo_src.clear()
-        self.combo_src.addItems([
-            "客户采集数据_2025Q1.csv",
-            "补录地址库.csv",
-            "小区地址库.xlsx"
-        ])
         
         self._refresh_task_list()
     
@@ -282,14 +353,17 @@ class Step4Widget(BaseStepWidget):
         for i, group in enumerate(self._task_groups):
             # 格式：任务名称 + 源表→目标数
             target_count = len(group.get("targets", []))
-            text = f"{group['name']}\n{group['source']} → {target_count}个目标表\n[{group['status']}]"
+            source_name = group.get('source', '未配置')
+            if len(source_name) > 20:
+                source_name = source_name[:18] + "..."
+            text = f"{group['name']}\n{source_name} → {target_count}个目标表\n[{group['status']}]"
             
             item = QListWidgetItem(text)
             item.setData(Qt.ItemDataRole.UserRole, i)
             
             # 根据状态设置颜色
             if group["status"] == "执行中":
-                item.setForeground(QColor("#2563eb"))
+                item.setForeground(QColor("#0284c7"))
             elif group["status"] == "已完成":
                 item.setForeground(QColor("#16a34a"))
             elif group["status"] == "已终止":
@@ -328,9 +402,13 @@ class Step4Widget(BaseStepWidget):
         self.config_title.setText(f"任务组配置：{group['name']}")
         
         # 更新源表
-        src_idx = self.combo_src.findText(group.get("source", ""))
-        if src_idx >= 0:
-            self.combo_src.setCurrentIndex(src_idx)
+        src = group.get("source", "")
+        if src in self._available_files:
+            self.combo_src.setCurrentText(src)
+        elif src:
+            # 如果文件不在列表中，添加它
+            self.combo_src.addItem(src)
+            self.combo_src.setCurrentText(src)
         
         # 更新源表过滤条件
         src_filter = group.get("source_filter", "")
@@ -350,53 +428,64 @@ class Step4Widget(BaseStepWidget):
         
         for r, target in enumerate(targets):
             # 序号
-            self.tgt_table.setItem(r, 0, QTableWidgetItem(str(r + 1)))
+            seq_item = QTableWidgetItem(str(r + 1))
+            seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.tgt_table.setItem(r, 0, seq_item)
             
             # 目标表（下拉框）
             combo = NoWheelComboBox()
             combo.setEditable(True)
-            combo.addItems(["门牌库_市政.csv", "小区地址库.xlsx", "GIS_小区点位.shp"])
+            combo.addItems(self._available_files)
             combo.setCurrentText(target.get("table", ""))
+            combo.setMinimumHeight(30)
             self.tgt_table.setCellWidget(r, 1, combo)
             
-            # 过滤条件按钮
-            btn_filter = QPushButton("配置")
-            btn_filter.setObjectName("step4_btn_link")
+            # 过滤条件按钮 - 显示状态
+            filter_text = "已配置" if target.get("filter") else "配置"
+            btn_filter = QPushButton(filter_text)
+            btn_filter.setObjectName("step4_btn_table_link")
             tgt_name = target.get("table", "")
             btn_filter.clicked.connect(lambda checked, t=tgt_name: self.open_filter_modal(t))
             self.tgt_table.setCellWidget(r, 2, btn_filter)
             
-            # 匹配字段按钮
-            btn_match = QPushButton("配置")
-            btn_match.setObjectName("step4_btn_link")
+            # 匹配字段按钮 - 显示状态
+            match_text = target.get("match_fields", "") or "配置"
+            btn_match = QPushButton(match_text)
+            btn_match.setObjectName("step4_btn_table_link")
             btn_match.clicked.connect(lambda checked, t=tgt_name: self.open_match_modal(t))
             self.tgt_table.setCellWidget(r, 3, btn_match)
+            
+            # 匹配方式说明
+            desc = target.get("match_desc", "")
+            desc_item = QTableWidgetItem(desc)
+            desc_item.setForeground(QColor("#64748b"))
+            self.tgt_table.setItem(r, 4, desc_item)
             
             # 操作按钮
             op_widget = QWidget()
             op_layout = QHBoxLayout(op_widget)
-            op_layout.setContentsMargins(2, 2, 2, 2)
-            op_layout.setSpacing(2)
+            op_layout.setContentsMargins(4, 4, 4, 4)
+            op_layout.setSpacing(4)
             
             btn_up = QPushButton("↑")
             btn_up.setObjectName("step4_btn_tiny")
-            btn_up.setFixedWidth(24)
+            btn_up.setFixedSize(26, 26)
             btn_up.clicked.connect(lambda checked, row=r: self._move_target(row, -1))
             op_layout.addWidget(btn_up)
             
             btn_down = QPushButton("↓")
             btn_down.setObjectName("step4_btn_tiny")
-            btn_down.setFixedWidth(24)
+            btn_down.setFixedSize(26, 26)
             btn_down.clicked.connect(lambda checked, row=r: self._move_target(row, 1))
             op_layout.addWidget(btn_down)
             
             btn_del = QPushButton("删")
             btn_del.setObjectName("step4_btn_tiny_del")
-            btn_del.setFixedWidth(24)
+            btn_del.setFixedSize(26, 26)
             btn_del.clicked.connect(lambda checked, row=r: self._delete_target(row))
             op_layout.addWidget(btn_del)
             
-            self.tgt_table.setCellWidget(r, 4, op_widget)
+            self.tgt_table.setCellWidget(r, 5, op_widget)
     
     def _add_task_group(self):
         """新增任务组"""
@@ -426,7 +515,8 @@ class Step4Widget(BaseStepWidget):
         group["targets"].append({
             "table": "",
             "filter": "",
-            "match_fields": ""
+            "match_fields": "",
+            "match_desc": ""
         })
         self._refresh_target_table(group["targets"])
         self._log("[Step4] 新增目标表", "info")
@@ -440,7 +530,7 @@ class Step4Widget(BaseStepWidget):
         sender = self.sender()
         if sender:
             for r in range(self.tgt_table.rowCount()):
-                widget = self.tgt_table.cellWidget(r, 4)
+                widget = self.tgt_table.cellWidget(r, 5)
                 if widget and sender in widget.findChildren(QPushButton):
                     row = r
                     break
@@ -463,7 +553,7 @@ class Step4Widget(BaseStepWidget):
         sender = self.sender()
         if sender:
             for r in range(self.tgt_table.rowCount()):
-                widget = self.tgt_table.cellWidget(r, 4)
+                widget = self.tgt_table.cellWidget(r, 5)
                 if widget and sender in widget.findChildren(QPushButton):
                     row = r
                     break
@@ -494,11 +584,13 @@ class Step4Widget(BaseStepWidget):
         targets = []
         for r in range(self.tgt_table.rowCount()):
             combo = self.tgt_table.cellWidget(r, 1)
+            desc_item = self.tgt_table.item(r, 4)
             if combo:
                 targets.append({
                     "table": combo.currentText(),
                     "filter": "",
-                    "match_fields": ""
+                    "match_fields": "",
+                    "match_desc": desc_item.text() if desc_item else ""
                 })
         group["targets"] = targets
         group["status"] = "待执行"
@@ -549,3 +641,8 @@ class Step4Widget(BaseStepWidget):
                 group["progress"] = 0
         self._refresh_task_list()
         self._log("[Step4] 终止所有任务组", "warn")
+    
+    def showEvent(self, event):
+        """显示时刷新文件列表"""
+        super().showEvent(event)
+        self._load_available_files()

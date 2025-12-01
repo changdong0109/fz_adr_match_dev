@@ -489,6 +489,94 @@ QPushButton#step2_btn_save_combo:hover {
     background-color: #166534;
 }
 
+/* Step2 文件选择下拉框 */
+QComboBox#step2_file_select_combo {
+    font-size: 13px;
+    padding: 6px 12px;
+    min-width: 300px;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background-color: #ffffff;
+}
+
+QComboBox#step2_file_select_combo:focus {
+    border-color: #0078d4;
+}
+
+/* Step2 文件配置滚动区域 */
+QScrollArea#step2_field_config_scroll {
+    border: 1px dashed #d1d5db;
+    border-radius: 4px;
+    background: #f9fafb;
+}
+
+/* Step2 清洗任务提示标签 */
+QLabel#step2_clean_tip_label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+/* Step2 清洗文件列表 */
+QListWidget#step2_clean_file_list {
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    font-size: 13px;
+    padding: 4px;
+}
+
+QListWidget#step2_clean_file_list::item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+QListWidget#step2_clean_file_list::item:hover {
+    background-color: #f0f0f0;
+}
+
+QListWidget#step2_clean_file_list::item:selected {
+    background-color: #d0e8ff;
+    color: #000000;
+}
+
+/* Step2 清洗任务按钮 */
+QPushButton#step2_btn_select_all,
+QPushButton#step2_btn_deselect_all,
+QPushButton#step2_btn_refresh_list {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-width: 80px;
+}
+
+QPushButton#step2_btn_run_clean {
+    background-color: #0078d4;
+    border-color: #0078d4;
+    color: #ffffff;
+    font-size: 13px;
+    padding: 6px 16px;
+    min-width: 100px;
+    font-weight: 500;
+}
+
+QPushButton#step2_btn_run_clean:hover {
+    background-color: #005a9e;
+}
+
+QPushButton#step2_btn_pause_clean,
+QPushButton#step2_btn_stop_clean {
+    font-size: 13px;
+    padding: 6px 16px;
+    min-width: 80px;
+}
+
+/* Step2 清洗状态标签 */
+QLabel#step2_clean_status_label {
+    font-size: 12px;
+    color: #6b7280;
+    min-width: 80px;
+}
+
 /* ========== CollapsibleSection 样式 ========== */
 /* 可折叠区域的样式 - 符合文档要求：所有样式在 QSS 中统一管理 */
 QFrame#collapsible_section_frame {

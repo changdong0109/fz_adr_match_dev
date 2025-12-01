@@ -10,20 +10,16 @@ from qgis.PyQt.QtWidgets import (
     QProgressBar, QRadioButton, QScrollArea, QFrame, QMessageBox,
     QAbstractItemView, QListWidget, QListWidgetItem
 )
-from qgis.PyQt.QtGui import QColor, QWheelEvent
+from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import Qt, QSettings
 from ..utils import safe_select_rows, safe_no_edit, set_resize_mode, safe_get_item_flag_enabled
 from ..widgets.base_step_widget import BaseStepWidget
+from ..widgets.result_dialog import ResultDialog
+from ..widgets.no_wheel_combo_box import NoWheelComboBox
 from ..collapsible_section import CollapsibleSection
 # 导入core层
 from ...core.data_loader import DataLoader
-
-
-class NoWheelComboBox(QComboBox):
-    """禁用滚轮的下拉框"""
-    def wheelEvent(self, event: QWheelEvent):
-        """忽略滚轮事件，防止意外修改"""
-        event.ignore()
+from ...core.data_cleaner import DataCleaner
 
 
 class Step2Widget(BaseStepWidget):
@@ -135,9 +131,18 @@ class Step2Widget(BaseStepWidget):
         section.add_widget(content_widget)
         return section
     
-    def _on_file_combo_changed(self, file_name: str):
+    def _on_file_combo_changed(self, display_text: str):
         """文件下拉框选择变化"""
-        if not file_name or file_name == "请选择文件...":
+        if not display_text or display_text == "请选择文件...":
+            self.current_file_id = None
+            self._refresh_field_config_display()
+            return
+        
+        # 从itemData获取真实的文件名
+        current_index = self.file_select_combo.currentIndex()
+        file_name = self.file_select_combo.itemData(current_index)
+        
+        if not file_name or file_name not in self.file_configs:
             self.current_file_id = None
             self._refresh_field_config_display()
             return
@@ -239,13 +244,11 @@ class Step2Widget(BaseStepWidget):
             file_columns = self._get_file_columns(self.current_file_id)
             if file_columns:
                 field_combo.addItems(file_columns)
-            else:
-                field_combo.addItems(["std_city", "province", "community_name", "estate_name", 
-                                   "addr_detail", "door_info", "door_no", "street_name"])
+            # 如果已有配置的字段不在列表中，也添加进去
             if field_data.get('field'):
                 if field_data['field'] not in [field_combo.itemText(i) for i in range(field_combo.count())]:
                     field_combo.addItem(field_data['field'])
-                field_combo.setCurrentText(field_data['field'])
+            field_combo.setCurrentText(field_data['field'])
             field_table.setCellWidget(r, 2, field_combo)
             field_table.setRowHeight(r, 48)
             
@@ -373,7 +376,7 @@ class Step2Widget(BaseStepWidget):
     def _delete_field_row(self, table: QTableWidget, row: int):
         """删除字段行"""
         if table.rowCount() <= 1:
-            QMessageBox.warning(self, "提示", "至少保留一行。")
+            ResultDialog.show_warning(self, "无法删除", "至少保留一行")
             return
         
         reply = QMessageBox.question(
@@ -387,8 +390,9 @@ class Step2Widget(BaseStepWidget):
         
         table.removeRow(row)
         for r in range(table.rowCount()):
-            if table.item(r, 0):
-                table.item(r, 0).setText(str(r + 1))
+            item = table.item(r, 0)
+            if item:
+                item.setText(str(r + 1))
             self._create_operation_buttons(table, r)
         
         self._log(f"[Step2] 删除字段行 {row}")
@@ -409,8 +413,8 @@ class Step2Widget(BaseStepWidget):
         if file_columns:
             field_combo.addItems(file_columns)
         else:
-            field_combo.addItems(["std_city", "province", "community_name", "estate_name", 
-                                 "addr_detail", "door_info", "door_no", "street_name"])
+            # 无法读取文件列名时，添加提示项
+            field_combo.addItem("（无法读取列名，请检查文件）")
         table.setCellWidget(row, 2, field_combo)
         
         self._create_operation_buttons(table, row)
@@ -419,7 +423,7 @@ class Step2Widget(BaseStepWidget):
     def _create_or_edit_combo(self, file_id: str):
         """创建或编辑字段组合"""
         if not file_id or file_id not in self.file_configs:
-            QMessageBox.warning(self, "提示", "请先选择一个文件")
+            ResultDialog.show_warning(self, "未选择文件", "请先选择一个文件")
             return
         
         file_columns = self._get_file_columns(file_id)
@@ -473,12 +477,12 @@ class Step2Widget(BaseStepWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         
-        btn_select_all = QPushButton("全选已配置")
+        btn_select_all = QPushButton("全选")
         btn_select_all.setObjectName("step2_btn_select_all")
         btn_select_all.clicked.connect(self._select_all_configured)
         btn_row.addWidget(btn_select_all)
         
-        btn_deselect_all = QPushButton("全不选")
+        btn_deselect_all = QPushButton("取消选择")
         btn_deselect_all.setObjectName("step2_btn_deselect_all")
         btn_deselect_all.clicked.connect(self._deselect_all)
         btn_row.addWidget(btn_deselect_all)
@@ -545,14 +549,21 @@ class Step2Widget(BaseStepWidget):
             # 只有已配置的文件才能选中
             if configured == "已配置":
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                # 保持之前的选中状态
-                is_checked = self.clean_selected_files.get(file_name, False)
+                # 如果之前有选中状态则保持，否则默认勾选「已配置且未清洗」的文件
+                if file_name in self.clean_selected_files:
+                    is_checked = self.clean_selected_files[file_name]
+                else:
+                    # 默认勾选已配置且未清洗的文件
+                    is_checked = (cleaned == "未清洗")
+                    self.clean_selected_files[file_name] = is_checked
                 item.setCheckState(Qt.CheckState.Checked if is_checked else Qt.CheckState.Unchecked)
             else:
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Unchecked)
                 # 设置灰色表示不可选
                 item.setForeground(QColor("#999999"))
+                # 未配置的文件不参与清洗
+                self.clean_selected_files[file_name] = False
             
             self.clean_file_list.addItem(item)
         
@@ -587,7 +598,7 @@ class Step2Widget(BaseStepWidget):
         selected_files = [f for f, selected in self.clean_selected_files.items() if selected]
         
         if not selected_files:
-            QMessageBox.warning(self, "提示", "请先选择要清洗的文件")
+            ResultDialog.show_warning(self, "未选择文件", "请先选择要清洗的文件")
             return
         
         # 检查所有选中的文件是否都已配置
@@ -597,14 +608,297 @@ class Step2Widget(BaseStepWidget):
                 unconfigured.append(file_name)
         
         if unconfigured:
-            QMessageBox.warning(self, "提示", f"以下文件尚未配置，无法清洗：\n{', '.join(unconfigured)}")
+            ResultDialog.show_warning(self, "配置不完整", f"以下文件尚未配置，无法清洗：\n{', '.join(unconfigured)}")
+            return
+        
+        # 获取全局配置（省市信息）
+        global_config = self._get_global_config()
+        if not global_config:
+            ResultDialog.show_error(self, "配置错误", "无法获取全局配置")
+            return
+        
+        region_info = global_config.get_region_info()
+        province = region_info.get('province', '')
+        city = region_info.get('city', '')
+        county = region_info.get('county', '')
+        base_folder = region_info.get('base_folder', '')
+        
+        if not province or not city or not base_folder:
+            ResultDialog.show_warning(self, "配置缺失", "请先在全局配置中设置省市信息")
             return
         
         self._log(f"[Step2] 开始清洗任务，共 {len(selected_files)} 个文件")
         
-        # 启动清洗任务
-        task_mgr = self.get_task_manager()
-        task_mgr.start_task("clean", self.bar_clean, self.lbl_clean, f"正在清洗 {len(selected_files)} 个文件...")
+        # 创建清洗器
+        cleaner = DataCleaner(log_callback=self._log)
+        
+        # 统计结果
+        total_valid = 0
+        total_invalid = 0
+        success_count = 0
+        fail_count = 0
+        has_permission_error = False
+        
+        # 更新进度条
+        self.bar_clean.setMaximum(len(selected_files))
+        self.bar_clean.setValue(0)
+        
+        for idx, file_name in enumerate(selected_files):
+            # 更新状态
+            self.lbl_clean.setText(f"正在清洗：{file_name}")
+            self.bar_clean.setValue(idx)
+            
+            # 处理Qt事件，保持UI响应
+            from qgis.PyQt.QtWidgets import QApplication
+            QApplication.processEvents()
+            
+            # 获取文件配置
+            file_info = self.file_configs.get(file_name, {})
+            file_path = file_info.get('saved_path', '')
+            source_type = file_info.get('source_type', '其他')
+            
+            if not file_path or not os.path.exists(file_path):
+                self._log(f"[Step2] 文件不存在：{file_name}", "error")
+                fail_count += 1
+                continue
+            
+            # 获取字段组合配置
+            combo = self.file_combo_configs.get(file_name)
+            if not combo or not combo.get('fields'):
+                self._log(f"[Step2] 未找到字段配置：{file_name}", "error")
+                fail_count += 1
+                continue
+            
+            # 输出目录使用用户基目录（符合文档设计）
+            output_dir = base_folder
+            
+            # 执行清洗
+            result = cleaner.clean_file(
+                file_path=file_path,
+                field_config=combo['fields'],
+                output_dir=output_dir,
+                province=province,
+                city=city,
+                county=county,
+                source_type=source_type
+            )
+            
+            if result['success']:
+                success_count += 1
+                total_valid += result['valid_count']
+                total_invalid += result['invalid_count']
+                
+                # 更新文件清洗状态（Step2 和 Step1 同步）
+                self.file_configs[file_name]['cleaned'] = '已清洗'
+                self._update_step1_cleaned_status(file_name, '已清洗')
+            else:
+                fail_count += 1
+                # 记录是否有文件占用错误
+                if result.get('has_permission_error'):
+                    has_permission_error = True
+                self._log(f"[Step2] 清洗失败 {file_name}：{result.get('error', '未知错误')}", "error")
+        
+        # 完成
+        self.bar_clean.setValue(len(selected_files))
+        self.lbl_clean.setText(f"完成：成功{success_count}个，失败{fail_count}个")
+        
+        # 刷新清洗任务列表（更新清洗状态显示）
+        self._refresh_clean_task_list()
+        
+        # 显示结果对话框
+        self._show_clean_result_dialog(success_count, fail_count, total_valid, total_invalid, has_permission_error)
+        
+        self._log(f"[Step2] 清洗任务完成：成功{success_count}个，失败{fail_count}个，有效{total_valid}条，剔除{total_invalid}条", "success")
+    
+    def _show_clean_result_dialog(self, success_count: int, fail_count: int, total_valid: int, total_invalid: int, has_permission_error: bool):
+        """显示清洗结果对话框"""
+        from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame
+        from qgis.PyQt.QtCore import Qt
+        
+        dialog = QDialog(self)
+        dialog.setObjectName("step2_clean_result_dialog")
+        dialog.setWindowTitle("清洗完成")
+        dialog.setMinimumWidth(380)
+        
+        # PyQt6 语法
+        dialog.setWindowFlags(dialog.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 20)
+        
+        # 标题区域
+        if fail_count == 0:
+            icon_text = "✅"
+            title_text = "清洗完成"
+            title_class = "success"
+        elif success_count == 0:
+            icon_text = "❌"
+            title_text = "清洗失败"
+            title_class = "error"
+        else:
+            icon_text = "⚠️"
+            title_text = "部分完成"
+            title_class = "warning"
+        
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(12)
+        
+        icon_label = QLabel(icon_text)
+        icon_label.setObjectName("step2_result_icon")
+        header_layout.addWidget(icon_label)
+        
+        title_label = QLabel(title_text)
+        title_label.setObjectName(f"step2_result_title_{title_class}")
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        
+        layout.addLayout(header_layout)
+        
+        # 分隔线
+        line = QFrame()
+        line.setObjectName("step2_result_divider")
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFixedHeight(1)
+        layout.addWidget(line)
+        
+        # 统计信息
+        stats_layout = QVBoxLayout()
+        stats_layout.setSpacing(8)
+        
+        # 文件处理统计
+        file_stats = QLabel(f"📁 文件处理：成功 {success_count} 个，失败 {fail_count} 个")
+        file_stats.setObjectName("step2_result_stats")
+        stats_layout.addWidget(file_stats)
+        
+        # 数据统计
+        data_stats = QLabel(f"📊 数据统计：有效 {total_valid} 条，剔除 {total_invalid} 条")
+        data_stats.setObjectName("step2_result_stats")
+        stats_layout.addWidget(data_stats)
+        
+        layout.addLayout(stats_layout)
+        
+        # 如果有文件占用错误，显示提示
+        if has_permission_error:
+            tip_frame = QFrame()
+            tip_frame.setObjectName("step2_result_tip_frame")
+            tip_layout = QVBoxLayout(tip_frame)
+            tip_layout.setContentsMargins(12, 10, 12, 10)
+            tip_layout.setSpacing(4)
+            
+            tip_title = QLabel("💡 提示")
+            tip_title.setObjectName("step2_result_tip_title")
+            tip_layout.addWidget(tip_title)
+            
+            tip_text = QLabel("部分文件保存失败，可能是因为 CSV 文件正被其他程序（如 Excel）打开。\n请关闭相关文件后重新执行清洗。")
+            tip_text.setObjectName("step2_result_tip_text")
+            tip_text.setWordWrap(True)
+            tip_layout.addWidget(tip_text)
+            
+            layout.addWidget(tip_frame)
+        
+        # 按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        ok_btn = QPushButton("确定")
+        ok_btn.setObjectName("step2_result_ok_btn")
+        ok_btn.clicked.connect(dialog.accept)
+        btn_layout.addWidget(ok_btn)
+        
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
+    
+    def _update_step1_cleaned_status(self, file_name: str, status: str):
+        """
+        更新 Step1 中对应文件的清洗状态，并保存到项目缓存
+        
+        Args:
+            file_name: 文件名
+            status: 清洗状态（'已清洗' / '未清洗'）
+        """
+        # 更新 Step1 内存中的状态
+        step1_data_sources = self.get_step1_data_sources()
+        if step1_data_sources and file_name in step1_data_sources:
+            step1_data_sources[file_name]['cleaned'] = status
+        
+        # 保存到项目缓存目录（持久化）
+        self._save_cleaned_status_to_project_cache(file_name, status)
+    
+    def _get_project_cleaned_status_file(self) -> str:
+        """获取项目级清洗状态缓存文件路径"""
+        global_config = self._get_global_config()
+        if not global_config:
+            return ""
+        region_info = global_config.get_region_info()
+        cache_folder = region_info.get('cache_folder', '')
+        if not cache_folder:
+            return ""
+        return os.path.join(cache_folder, "file_status.json")
+    
+    def _save_cleaned_status_to_project_cache(self, file_name: str, status: str):
+        """保存清洗状态到项目缓存（使用新的 file_status.json 格式）"""
+        cache_file = self._get_project_cleaned_status_file()
+        if not cache_file:
+            return
+        
+        # 读取现有缓存
+        file_status = {}
+        if os.path.exists(cache_file):
+            try:
+                import json
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    file_status = json.load(f)
+            except:
+                pass
+        
+        # 更新并保存（新格式：{file_name: {cleaned: status, source_type: type}}）
+        if file_name not in file_status:
+            file_status[file_name] = {}
+        # 兼容旧格式：如果是字符串，转换为字典
+        if isinstance(file_status[file_name], str):
+            file_status[file_name] = {"cleaned": file_status[file_name]}
+        file_status[file_name]["cleaned"] = status
+        
+        try:
+            import json
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(file_status, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self._log(f"[Step2] 保存清洗状态失败：{e}", "error")
+    
+    def _load_cleaned_status_from_project_cache(self) -> dict:
+        """
+        从项目缓存加载清洗状态
+        
+        返回格式：{file_name: "已清洗"} （提取 cleaned 字段）
+        兼容新旧格式
+        """
+        cache_file = self._get_project_cleaned_status_file()
+        if not cache_file or not os.path.exists(cache_file):
+            # 兼容旧文件名
+            old_cache_file = cache_file.replace("file_status.json", "file_cleaned_status.json") if cache_file else None
+            if old_cache_file and os.path.exists(old_cache_file):
+                cache_file = old_cache_file
+            else:
+                return {}
+        
+        try:
+            import json
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # 提取 cleaned 字段，兼容新旧格式
+            result = {}
+            for file_name, value in data.items():
+                if isinstance(value, str):
+                    result[file_name] = value  # 旧格式
+                elif isinstance(value, dict):
+                    result[file_name] = value.get('cleaned', '未清洗')  # 新格式
+            return result
+        except:
+            return {}
     
     # ==================== 通用方法 ====================
     
@@ -638,10 +932,20 @@ class Step2Widget(BaseStepWidget):
             self.file_select_combo.clear()
             self.file_select_combo.addItem("请选择文件...")
             self._refresh_clean_task_list()
+            self._refresh_field_config_display()
             return
         
         # 保存当前选择
         current_selection = self.current_file_id
+        
+        # 从项目缓存加载清洗状态（与Step1保持一致）
+        cached_cleaned_status = self._load_cleaned_status_from_project_cache()
+        
+        # 同时保留内存中的状态（优先级：内存 > 缓存 > 默认）
+        existing_cleaned_status = {
+            name: info.get('cleaned', '未清洗') 
+            for name, info in self.file_configs.items()
+        }
         
         # 清空当前配置
         self.file_configs.clear()
@@ -650,7 +954,9 @@ class Step2Widget(BaseStepWidget):
         for file_name, file_info in step1_data_sources.items():
             saved_path = file_info.get('saved_path', '')
             source_type = file_info.get('source_type', '其他')
-            cleaned = file_info.get('cleaned', '未清洗')
+            
+            # 优先级：内存状态 > 缓存状态 > 默认值
+            cleaned = existing_cleaned_status.get(file_name) or cached_cleaned_status.get(file_name, '未清洗')
             
             if not saved_path or not os.path.exists(saved_path):
                 continue
@@ -672,29 +978,60 @@ class Step2Widget(BaseStepWidget):
                 "cleaned": cleaned
             }
         
-        # 更新文件选择下拉框
-        self.file_select_combo.blockSignals(True)
-        self.file_select_combo.clear()
-        self.file_select_combo.addItem("请选择文件...")
-        for file_name in self.file_configs.keys():
-            self.file_select_combo.addItem(file_name)
-        
-        # 恢复选择
-        if current_selection and current_selection in self.file_configs:
-            idx = self.file_select_combo.findText(current_selection)
-            if idx >= 0:
-                self.file_select_combo.setCurrentIndex(idx)
-        self.file_select_combo.blockSignals(False)
+        # 更新文件选择下拉框（显示配置状态）
+        self._update_file_select_combo(current_selection)
         
         # 刷新清洗任务列表
         self._refresh_clean_task_list()
         
         # 刷新字段配置显示
-        if self.current_file_id and self.current_file_id not in self.file_configs:
-            self.current_file_id = None
         self._refresh_field_config_display()
         
         self._log(f"[Step2] 已刷新文件列表，找到 {len(self.file_configs)} 个文件", "info")
+    
+    def _update_file_select_combo(self, preserve_selection: str = None):
+        """更新文件选择下拉框（显示配置状态）"""
+        self.file_select_combo.blockSignals(True)
+        self.file_select_combo.clear()
+        
+        if not self.file_configs:
+            self.file_select_combo.addItem("请选择文件...")
+            self.file_select_combo.blockSignals(False)
+            return
+        
+        # 添加文件项，显示配置状态
+        first_file = None
+        for file_name, file_info in self.file_configs.items():
+            if first_file is None:
+                first_file = file_name
+            
+            field_count = file_info.get("field_count", 0)
+            configured = file_info.get("configured", "未配置")
+            
+            # 格式：文件名 [已配置 3字段] 或 文件名 [未配置]
+            if configured == "已配置":
+                display_text = f"{file_name}  [已配置 {field_count}字段]"
+            else:
+                display_text = f"{file_name}  [未配置]"
+            
+            self.file_select_combo.addItem(display_text, file_name)
+        
+        # 恢复选择或默认选择第一个
+        if preserve_selection and preserve_selection in self.file_configs:
+            # 恢复之前的选择
+            for i in range(self.file_select_combo.count()):
+                if self.file_select_combo.itemData(i) == preserve_selection:
+                    self.file_select_combo.setCurrentIndex(i)
+                    self.current_file_id = preserve_selection
+                    break
+        elif first_file and not self.current_file_id:
+            # 默认选择第一个文件
+            self.file_select_combo.setCurrentIndex(0)
+            self.current_file_id = first_file
+            # 加载第一个文件的配置
+            self._load_file_combo_config(first_file)
+        
+        self.file_select_combo.blockSignals(False)
     
     def _get_global_config(self):
         """获取全局配置"""
@@ -741,11 +1078,11 @@ class Step2Widget(BaseStepWidget):
     def _save_file_combo_config(self, file_name: str):
         """保存配置到cache目录"""
         if not file_name or file_name not in self.file_combo_configs:
-            QMessageBox.warning(self, "提示", "当前文件没有字段组合配置")
+            ResultDialog.show_warning(self, "无配置", "当前文件没有字段组合配置")
             return
         
         if not self.current_field_table:
-            QMessageBox.warning(self, "提示", "无法读取字段配置")
+            ResultDialog.show_error(self, "读取失败", "无法读取字段配置")
             return
         
         # 读取表格数据
@@ -759,7 +1096,7 @@ class Step2Widget(BaseStepWidget):
                 fields.append({"role": role, "field": field})
         
         if not fields:
-            QMessageBox.warning(self, "提示", "请至少配置一个字段")
+            ResultDialog.show_warning(self, "字段为空", "请至少配置一个字段")
             return
         
         # 更新配置
@@ -768,7 +1105,7 @@ class Step2Widget(BaseStepWidget):
         
         config_path = self._get_combo_config_file_path(file_name)
         if not config_path:
-            QMessageBox.warning(self, "提示", "无法获取缓存目录，请检查全局配置")
+            ResultDialog.show_error(self, "缓存错误", "无法获取缓存目录，请检查全局配置")
             return
         
         try:
@@ -782,14 +1119,17 @@ class Step2Widget(BaseStepWidget):
             self.file_configs[file_name]["field_count"] = field_count
             self.file_configs[file_name]["configured"] = "已配置" if field_count > 0 else "未配置"
             
+            # 刷新文件选择下拉框（更新配置状态显示）
+            self._update_file_select_combo(file_name)
+            
             # 刷新清洗任务列表
             self._refresh_clean_task_list()
             
             self._log(f"[Step2] 已保存文件 {file_name} 的配置", "success")
-            QMessageBox.information(self, "提示", f"配置已保存，共 {field_count} 个字段")
+            ResultDialog.show_success(self, "保存成功", f"配置已保存，共 {field_count} 个字段")
         except Exception as e:
             self._log(f"[Step2] 保存配置失败：{e}", "error")
-            QMessageBox.warning(self, "错误", f"保存失败：{e}")
+            ResultDialog.show_error(self, "保存失败", str(e))
     
     def _get_file_columns(self, file_name: str) -> List[str]:
         """获取文件列名"""

@@ -26,19 +26,57 @@ class Step4Widget(BaseStepWidget):
         self.group_labels: Dict[str, QLabel] = {}
         super().__init__(parent, log_callback, task_manager)
         self._build_ui()
+        # 设置尺寸策略，让Step4Widget能够扩展填满可用空间
+        self._set_expanding_size_policy()
+    
+    def _set_expanding_size_policy(self):
+        """设置Step4Widget的尺寸策略为Expanding"""
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        try:
+            if hasattr(QSizePolicy, 'Policy') and hasattr(QSizePolicy.Policy, 'Expanding'):
+                expanding = QSizePolicy.Policy.Expanding
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+            else:
+                expanding = 7  # Expanding = 7
+            self.setSizePolicy(expanding, expanding)
+        except (AttributeError, TypeError):
+            self.setSizePolicy(7, 7)  # Expanding, Expanding
+    
+    def _set_groupbox_expanding(self, box: QGroupBox):
+        """为QGroupBox设置水平扩展尺寸策略"""
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        try:
+            if hasattr(QSizePolicy, 'Policy'):
+                if hasattr(QSizePolicy.Policy, 'Expanding'):
+                    expanding = QSizePolicy.Policy.Expanding
+                    preferred = QSizePolicy.Policy.Preferred
+                else:
+                    expanding = 7
+                    preferred = 1
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+                preferred = QSizePolicy.Preferred
+            else:
+                expanding = 7
+                preferred = 1
+            box.setSizePolicy(expanding, preferred)  # 水平扩展，垂直Preferred
+        except (AttributeError, TypeError):
+            box.setSizePolicy(7, 1)  # Expanding, Preferred
     
     def _build_ui(self):
         """构建UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(0, 6, 0, 6)  # 移除左右边距，由父容器统一控制
         
         layout.addWidget(self._card_task_groups())
         layout.addWidget(self._card_group_config())
-        layout.addStretch()
+        # 移除addStretch，让内容充分利用空间
     
     def _card_task_groups(self) -> QGroupBox:
         """匹配任务组列表"""
         box = QGroupBox("匹配任务组列表（多源表）")
+        self._set_groupbox_expanding(box)
         v = QVBoxLayout(box)
         v.addWidget(QLabel("每个任务组定义：一个源表 → 若干目标表（带优先级）。任务组之间可以并行执行。"))
         
@@ -147,6 +185,7 @@ class Step4Widget(BaseStepWidget):
         """当前任务组配置"""
         box = QGroupBox("当前任务组配置：任务组1（示例）")
         self.group_config_title = box
+        self._set_groupbox_expanding(box)
         v = QVBoxLayout(box)
         
         row = QHBoxLayout()

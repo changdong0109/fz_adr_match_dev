@@ -27,13 +27,15 @@
 1. [项目概述](#项目概述)
 2. [需求与功能](#需求与功能)
 3. [架构设计](#架构设计)
-4. [代码组织指南](#代码组织指南)
-5. [实现逻辑](#实现逻辑)
-6. [开发规范](#开发规范)
-7. [使用指南](#使用指南)
-8. [开发状态](#开发状态)
-9. [待办事项](#待办事项)
-10. [AI开发指南](#ai开发指南)
+4. [缓存与状态管理](#缓存与状态管理)
+5. [代码组织指南](#代码组织指南)
+6. [实现逻辑](#实现逻辑)
+7. [公共组件设计](#公共组件设计)
+8. [开发规范](#开发规范)
+9. [使用指南](#使用指南)
+10. [开发状态](#开发状态)
+11. [待办事项](#待办事项)
+12. [AI开发指南](#ai开发指南)
 
 ---
 
@@ -188,7 +190,8 @@ fz_adr_match_dev/
 │       ├── __init__.py
 │       ├── base_step_widget.py    # Step Widget基类
 │       ├── task_manager.py        # UI任务管理（进度条、定时器）
-│       └── global_config_widget.py
+│       ├── global_config_widget.py # 全局配置组件
+│       └── result_dialog.py       # 通用结果弹窗组件
 │
 ├── utils/                    # 通用工具层（跨模块的通用工具函数）
 │   ├── __init__.py
@@ -238,6 +241,11 @@ fz_adr_match_dev/
 - **TaskManager** (`ui/widgets/task_manager.py`): 统一管理所有任务的进度和定时器
   - 独立模块，职责单一
   - 通过依赖注入提供给 Step Widgets
+
+- **ResultDialog** (`ui/widgets/result_dialog.py`): 通用结果弹窗组件
+  - 统一的弹窗样式，支持成功/失败/警告/信息四种类型
+  - 避免各处重复定义弹窗样式
+  - 样式通过 QSS 统一管理
   
 - **StyleManager** (`ui/styles.py`): 统一管理所有样式（QSS加载）
   - 独立模块，职责单一
@@ -479,6 +487,299 @@ class Step2Widget(BaseStepWidget):
 
 ---
 
+## 缓存与状态管理
+
+> ⚠️ **重要**：本章节定义了项目的缓存架构设计，是Step1-5开发的唯一参考标准。
+> 所有缓存相关的开发必须遵循本设计。
+
+### Step 1-5 数据流转全景
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              全局配置 (GlobalConfig)                         │
+│  省/市/县 + 基目录 → 自动生成文件夹 → 所有Step共享                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+     ┌────────────────────────────────┼────────────────────────────────┐
+     ▼                                ▼                                ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│  Step1   │  │  Step2   │  │  Step3   │  │  Step4   │  │  Step5   │
+│ 文件导入 │─▶│ 字段清洗 │─▶│ 标准化   │─▶│ 匹配任务 │─▶│ 导出日志 │
+├──────────┤  ├──────────┤  ├──────────┤  ├──────────┤  ├──────────┤
+│ 输入:    │  │ 输入:    │  │ 输入:    │  │ 输入:    │  │ 输入:    │
+│ CSV/SHP  │  │ Step1数据│  │ 清洗后CSV│  │ 标准化数据│  │ 匹配结果 │
+├──────────┤  ├──────────┤  ├──────────┤  ├──────────┤  ├──────────┤
+│ 输出:    │  │ 输出:    │  │ 输出:    │  │ 输出:    │  │ 输出:    │
+│ 统一CSV  │  │ 清洗CSV  │  │ 解析结果 │  │ 匹配结果 │  │ 导出文件 │
+├──────────┤  ├──────────┤  ├──────────┤  ├──────────┤  ├──────────┤
+│ 状态:    │  │ 状态:    │  │ 状态:    │  │ 状态:    │  │ 状态:    │
+│ 已导入   │  │ 已配置   │  │ 已解析   │  │ 已匹配   │  │ 已导出   │
+│          │  │ 已清洗   │  │          │  │          │  │          │
+└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+     │              │              │              │              │
+     └──────────────┴──────────────┴──────────────┴──────────────┘
+                                   │
+                                   ▼
+                    ┌─────────────────────────────┐
+                    │   项目缓存 (cache数据/)      │
+                    │   统一持久化所有Step状态     │
+                    └─────────────────────────────┘
+```
+
+### 缓存层次
+
+| 层次 | 存储位置 | 内容 | 生命周期 |
+|------|----------|------|----------|
+| **QSettings** | QGIS注册表 | 上次使用的省市县、基目录 | 跨会话持久 |
+| **项目缓存** | `{省}{市}cache数据/` | 各Step状态和配置 | 项目级持久 |
+| **内存** | Step Widgets | 运行时UI状态 | 会话级 |
+
+### 项目文件夹结构（完整版）
+
+```
+用户选择的基目录/
+│
+├── {省}{市}{县}客户数据/              # Step1: 导入的客户CSV
+│   └── *.csv
+│
+├── {省}{市}{县}shp数据/               # Step1: SHP转换后的CSV
+│   └── *.csv
+│
+├── {省}{市}{县}_客户数据清洗/         # Step2: 清洗输出（客户类型）
+│   ├── 清洗后数据/*.csv
+│   └── 异常数据/*.csv
+│
+├── {省}{市}{县}_GIS数据清洗/          # Step2: 清洗输出（GIS类型）
+│   ├── 清洗后数据/*.csv
+│   └── 异常数据/*.csv
+│
+├── {省}{市}{县}_标准化结果/           # Step3: 标准化解析输出
+│   └── *.csv
+│
+├── {省}{市}{县}_匹配结果/             # Step4: 匹配输出
+│   └── *.csv
+│
+├── {省}{市}{县}_导出/                 # Step5: 最终导出
+│   ├── 匹配报告/*.xlsx
+│   └── 日志/*.log
+│
+└── {省}{市}{县}cache数据/             # 项目级缓存（核心）
+    │
+    ├── region_cache.json             # 区域配置
+    │
+    ├── file_status.json              # Step1/2: 文件状态（cleaned + source_type）
+    ├── {文件名}_combo_config.json    # Step2: 字段组合配置
+    │
+    ├── parse_status.json             # Step3: 解析状态
+    ├── api_cache/                    # Step3: API调用缓存
+    │   └── {hash}.json
+    │
+    ├── match_tasks.json              # Step4: 匹配任务配置
+    ├── match_results/                # Step4: 匹配结果缓存
+    │   └── {任务名}.json
+    │
+    └── export_history.json           # Step5: 导出历史
+```
+
+### 各Step缓存文件格式
+
+#### Step1/Step2 - 文件状态
+**file_status.json** - 统一存储文件的清洗状态和来源类型
+```json
+{
+  "廊坊工商户.csv": {
+    "cleaned": "已清洗",
+    "source_type": "客户采集数据"
+  },
+  "民用户.csv": {
+    "cleaned": "已清洗",
+    "source_type": "客户采集数据"
+  },
+  "阀门.csv": {
+    "cleaned": "未清洗",
+    "source_type": "GIS 数据"
+  }
+}
+```
+
+#### Step2 - 字段组合配置
+**{文件名}_combo_config.json**
+```json
+{
+  "fields": [
+    {"role": "地址", "field": "address"},
+    {"role": "区域", "field": "location"},
+    {"role": "名称", "field": "name"}
+  ]
+}
+```
+
+#### Step3 - 解析状态
+**parse_status.json**
+```json
+{
+  "廊坊工商户_清洗.csv": {
+    "parsed": true,
+    "parse_time": "2024-12-01T17:00:00",
+    "total_rows": 8069,
+    "success_rows": 8000,
+    "fail_rows": 69
+  }
+}
+```
+
+**api_cache/{hash}.json** - API调用缓存
+```json
+{
+  "address": "河北省廊坊市新开路街道未来城1栋",
+  "result": {
+    "province": "河北省",
+    "city": "廊坊市",
+    "district": "广阳区",
+    "street": "新开路街道",
+    "detail": "未来城1栋",
+    "lng": 116.7,
+    "lat": 39.5
+  },
+  "cached_at": "2024-12-01T17:00:00"
+}
+```
+
+#### Step4 - 匹配任务
+**match_tasks.json**
+```json
+{
+  "tasks": [
+    {
+      "id": "task_001",
+      "name": "客户数据匹配GIS",
+      "left_file": "廊坊工商户_清洗.csv",
+      "right_file": "管网数据.csv",
+      "match_fields": [
+        {"left": "address", "right": "gis_address", "weight": 0.6},
+        {"left": "name", "right": "gis_name", "weight": 0.4}
+      ],
+      "threshold": 0.8,
+      "status": "completed"
+    }
+  ]
+}
+```
+
+#### Step5 - 导出历史
+**export_history.json**
+```json
+{
+  "exports": [
+    {
+      "id": "export_001",
+      "type": "match_result",
+      "source_task": "task_001",
+      "output_file": "匹配结果_20241201.xlsx",
+      "export_time": "2024-12-01T19:00:00"
+    }
+  ]
+}
+```
+
+### Step间数据流转
+
+```
+Step1 导入文件
+    │
+    ├─▶ data_sources (内存)
+    │
+    ▼
+Step2 配置字段组合
+    │
+    ├─▶ 保存到 {文件名}_combo_config.json
+    │
+    ▼
+Step2 执行清洗
+    │
+    ├─▶ 输出到 {省}{市}_客户数据清洗/清洗后数据/*.csv
+    ├─▶ 保存状态到 file_cleaned_status.json
+    ├─▶ 同步更新 Step1 内存
+    │
+    ▼
+Step3 标准化解析（调用阿里云API）
+    │
+    ├─▶ 读取清洗后的CSV
+    ├─▶ API结果缓存到 api_cache/
+    ├─▶ 输出到 {省}{市}_标准化结果/*.csv
+    ├─▶ 保存状态到 parse_status.json
+    │
+    ▼
+Step4 匹配任务
+    │
+    ├─▶ 读取标准化后的数据
+    ├─▶ 配置保存到 match_tasks.json
+    ├─▶ 结果缓存到 match_results/
+    ├─▶ 输出到 {省}{市}_匹配结果/*.csv
+    │
+    ▼
+Step5 导出 & 日志
+    │
+    ├─▶ 读取匹配结果
+    ├─▶ 导出到 {省}{市}_导出/
+    └─▶ 记录到 export_history.json
+```
+
+### 实施路线图
+
+#### 短期 - Step1/Step2（当前已完成）
+- ✅ 清洗状态保存到项目缓存目录
+- ✅ 字段组合配置保存到项目缓存目录
+- ✅ Step1/Step2 共享同一缓存
+- [ ] Step1 表格自动刷新（当Step2清洗完成时）
+
+#### 中期 - Step3（标准化解析）
+- [ ] 实现阿里云地址解析API调用
+- [ ] API结果缓存（避免重复请求，节省费用）
+- [ ] 解析状态保存到 parse_status.json
+- [ ] 解析进度显示
+
+#### 中期 - Step4（匹配任务）
+- [ ] 匹配任务配置界面
+- [ ] 精准/模糊/组合匹配算法
+- [ ] 匹配结果缓存
+- [ ] 匹配进度和结果预览
+
+#### 中期 - Step5（导出日志）
+- [ ] 匹配结果导出（Excel/CSV）
+- [ ] 日志导出
+- [ ] 导出历史记录
+
+#### 长期 - 架构升级（规模扩大后）
+- [ ] 合并缓存文件为 project_state.json
+- [ ] 创建 ProjectStateManager（Core层）
+- [ ] 添加事件机制（跨Step自动刷新）
+- [ ] 添加缓存版本号和迁移机制
+
+### 已知缺陷（接受）
+
+| 缺陷 | 说明 | 影响范围 | 接受原因 |
+|------|------|----------|----------|
+| 文件名冲突 | 同名文件会共用状态 | 低 | 简化实现 |
+| 缓存失效 | 手动删除文件后缓存不清理 | 低 | 后续可加清理 |
+| 无版本控制 | 缓存格式升级需手动处理 | 低 | 格式稳定 |
+| 无并发控制 | 多实例可能冲突 | 低 | 单实例为主 |
+
+### 相关代码位置
+
+| 功能 | 文件 | 方法 |
+|------|------|------|
+| 加载文件状态 | `ui/steps/step1_widget.py` | `_load_file_status_from_project_cache()` |
+| 保存文件状态 | `ui/steps/step1_widget.py` | `_save_file_status_to_project_cache()` |
+| 来源类型变更 | `ui/steps/step1_widget.py` | `_on_source_type_changed()` |
+| 加载清洗状态 | `ui/steps/step2_widget.py` | `_load_cleaned_status_from_project_cache()` |
+| 保存清洗状态 | `ui/steps/step2_widget.py` | `_save_cleaned_status_to_project_cache()` |
+| 加载字段配置 | `ui/steps/step2_widget.py` | `_load_file_combo_config()` |
+| 保存字段配置 | `ui/steps/step2_widget.py` | `_save_file_combo_config()` |
+| 全局配置 | `ui/widgets/global_config_widget.py` | `get_region_info()` |
+
+---
+
 ## 实现逻辑
 
 ### 数据流与工作流
@@ -570,7 +871,77 @@ fuzzy_results = engine.fuzzy_match(left_data, right_data, 'address', 'address')
 # [{'left': {...}, 'right': {...}, 'match_type': 'exact', 'confidence': 1.0}, ...]
 ```
 
-#### 4. MatchDialog（主对话框）
+#### 4. FieldRelationAnalyzer（字段关联分析器）
+
+**位置**: `core/field_relation.py`
+
+**功能**:
+- 读取多个 CSV/Excel 文件
+- 计算跨文件字段间的值重叠（Jaccard 相似度、包含度）
+- 构建 NetworkX 关系图
+- 社区发现（Louvain 算法）
+- 中心性分析
+- 生成洞察报告
+
+**API**:
+```python
+from core.field_relation import FieldRelationAnalyzer
+
+analyzer = FieldRelationAnalyzer(log_callback=my_log, progress_callback=my_progress)
+result = analyzer.analyze(file_paths=['a.csv', 'b.csv'], min_overlap=1)
+
+# 返回格式
+# {
+#   'success': True,
+#   'fields': [...],      # 所有字段列表
+#   'relations': [...],   # 字段关联关系
+#   'insights': [...],    # 洞察发现
+#   'layout': {...},      # 图布局坐标
+#   'communities': [...], # 社区/簇
+#   'centrality': {...}   # 中心性指标
+# }
+```
+
+#### 5. RelationExporter（关联数据导出器）
+
+**位置**: `core/field_relation.py`
+
+**功能**:
+- 执行两表关联操作（INNER JOIN / LEFT ANTI JOIN / RIGHT ANTI JOIN）
+- 导出带颜色区分的 Excel 文件
+- 导出 CSV 文件
+
+**导出类型**:
+| 类型 | 常量 | 说明 |
+|------|------|------|
+| 关联数据 | `JOIN_INNER` | 两表都有的数据 |
+| A表未关联 | `JOIN_LEFT_ONLY` | A表有但B表没有 |
+| B表未关联 | `JOIN_RIGHT_ONLY` | B表有但A表没有 |
+
+**API**:
+```python
+from core.field_relation import RelationExporter
+
+exporter = RelationExporter(log_callback=my_log)
+result = exporter.export(
+    path_a='customers.csv',
+    path_b='addresses.csv',
+    col_a='customer_id',
+    col_b='addr_customer_id',
+    output_path='joined.xlsx',
+    join_type=RelationExporter.JOIN_INNER  # 或 JOIN_LEFT_ONLY / JOIN_RIGHT_ONLY
+)
+
+# 返回格式
+# {
+#   'success': True,
+#   'message': '已导出 1000 条关联数据',
+#   'row_count': 1000,
+#   'output_path': 'joined.xlsx'
+# }
+```
+
+#### 6. MatchDialog（主对话框）
 
 **位置**: `ui/match_dialog.py`
 
@@ -663,6 +1034,69 @@ global_config.region_changed.connect(callback)
 - Step5（导出）: 导出文件保存到 `customer_folder`
 - SHP数据: 保存到 `shp_folder`
 - 缓存数据: 保存到 `cache_folder`
+
+---
+
+## 公共组件设计
+
+> 遵循 DRY 原则，将通用功能抽取为公共组件，避免代码重复。
+
+### 公共组件列表
+
+| 组件 | 位置 | 用途 |
+|------|------|------|
+| ResultDialog | `ui/widgets/result_dialog.py` | 统一风格的结果弹窗 |
+| CollapsibleSection | `ui/collapsible_section.py` | 可折叠的分组容器 |
+| BaseStepWidget | `ui/widgets/base_step_widget.py` | Step Widget 基类 |
+| TaskManager | `ui/widgets/task_manager.py` | 任务进度管理 |
+| GlobalConfigWidget | `ui/widgets/global_config_widget.py` | 全局配置组件 |
+
+### ResultDialog - 通用结果弹窗
+
+**设计原则**：
+- 统一弹窗样式，避免各处使用原生 QMessageBox
+- 样式通过 QSS 管理，保持风格一致
+- 支持四种类型：成功(✅)、失败(❌)、警告(⚠️)、信息(ℹ️)
+
+**使用方式**：
+```python
+from ..widgets.result_dialog import ResultDialog
+
+# 成功弹窗
+ResultDialog.show_success(self, "操作成功", "数据已保存")
+
+# 错误弹窗
+ResultDialog.show_error(self, "操作失败", "文件不存在")
+
+# 警告弹窗
+ResultDialog.show_warning(self, "注意", "部分数据未处理")
+
+# 信息弹窗
+ResultDialog.show_info(self, "提示", "请先配置参数")
+
+# 带详细信息
+ResultDialog.show_success(
+    self, "连接成功", "API 配置正确",
+    detail="💡 提示：结果会自动缓存",
+    window_title="测试结果"
+)
+```
+
+**禁止做法**：
+```python
+# ❌ 错误：直接使用 QMessageBox
+QMessageBox.information(self, "提示", "操作完成")
+
+# ✅ 正确：使用公共组件
+ResultDialog.show_success(self, "操作完成", "数据已保存")
+```
+
+### 公共组件开发规范
+
+1. **位置**：公共组件统一放在 `ui/widgets/` 目录
+2. **样式**：通过 QSS 管理，不使用内联样式
+3. **命名**：使用 `setObjectName()` 设置对象名，便于 QSS 匹配
+4. **文档**：组件需要有清晰的文档说明用法
 
 ---
 
@@ -954,6 +1388,38 @@ def load_xxx(file_path: str) -> List[Dict]:
 ---
 
 ## 更新日志
+
+### 2024-12-01 - Step2清洗功能实现与结果对话框优化
+- **核心功能实现**：
+  - **数据清洗模块** (`core/data_cleaner.py`)：
+    - 按用户配置的字段顺序拼接地址
+    - 删除全空行（配置字段全为空）
+    - 删除纯行政区行（只有省市区街道村等，无具体地址）
+    - 去除噪声关键字（高压、中压、nan等）
+    - 去除冗余占位词（无单元、无号、无楼、暂无等）
+    - 清理连续的"无"字（如"无1059" → "1059"）
+    - 去除拼接后重复的内容（如"32090部队...32090部队" → "32090部队..."）
+    - 忽略全数字且无差异的字段
+    - 不含中文的字段不纳入拼接
+    - 新增 `{文件名}_adr_clean` 列
+  - **输出目录结构**：
+    - `{省}{市}_客户数据清洗/清洗后数据/{文件名}_清洗.csv`
+    - `{省}{市}_客户数据清洗/异常数据/{文件名}_剔除.csv`（含剔除原因列）
+- **纯行政区判断逻辑优化**：
+  - 包含数字（门牌号等）→ 不是纯行政区
+  - 包含具体地址关键词（超市、公司、小区、号、栋等）→ 不是纯行政区
+  - 文本较长（>15个中文字符）→ 不是纯行政区
+  - 只有完全是"河北省廊坊市"这种纯行政区划才剔除
+- **清洗结果对话框优化**（符合架构规范）：
+  - 使用 `objectName` 标识组件，样式在 `styles.qss` 中统一管理
+  - 根据结果状态显示不同图标和颜色（成功/警告/失败）
+  - 文件被占用时显示友好提示，建议关闭相关文件后重试
+  - 新增 QSS 样式：
+    - `step2_clean_result_dialog` - 对话框
+    - `step2_result_title_success/warning/error` - 结果标题
+    - `step2_result_stats` - 统计信息
+    - `step2_result_tip_frame/title/text` - 提示框
+    - `step2_result_ok_btn` - 确定按钮
 
 ### 2024-12-XX - Step2页面架构规范修复（第三版）
 - **符合架构要求**：

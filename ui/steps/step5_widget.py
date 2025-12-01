@@ -19,19 +19,57 @@ class Step5Widget(BaseStepWidget):
         # log_panel 参数保留以兼容，但不再使用（日志面板在主对话框中）
         super().__init__(parent, log_callback, task_manager)
         self._build_ui()
+        # 设置尺寸策略，让Step5Widget能够扩展填满可用空间
+        self._set_expanding_size_policy()
+    
+    def _set_expanding_size_policy(self):
+        """设置Step5Widget的尺寸策略为Expanding"""
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        try:
+            if hasattr(QSizePolicy, 'Policy') and hasattr(QSizePolicy.Policy, 'Expanding'):
+                expanding = QSizePolicy.Policy.Expanding
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+            else:
+                expanding = 7  # Expanding = 7
+            self.setSizePolicy(expanding, expanding)
+        except (AttributeError, TypeError):
+            self.setSizePolicy(7, 7)  # Expanding, Expanding
+    
+    def _set_groupbox_expanding(self, box: QGroupBox):
+        """为QGroupBox设置水平扩展尺寸策略"""
+        from qgis.PyQt.QtWidgets import QSizePolicy
+        try:
+            if hasattr(QSizePolicy, 'Policy'):
+                if hasattr(QSizePolicy.Policy, 'Expanding'):
+                    expanding = QSizePolicy.Policy.Expanding
+                    preferred = QSizePolicy.Policy.Preferred
+                else:
+                    expanding = 7
+                    preferred = 1
+            elif hasattr(QSizePolicy, 'Expanding'):
+                expanding = QSizePolicy.Expanding
+                preferred = QSizePolicy.Preferred
+            else:
+                expanding = 7
+                preferred = 1
+            box.setSizePolicy(expanding, preferred)  # 水平扩展，垂直Preferred
+        except (AttributeError, TypeError):
+            box.setSizePolicy(7, 1)  # Expanding, Preferred
     
     def _build_ui(self):
         """构建UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(0, 6, 0, 6)  # 移除左右边距，由父容器统一控制
         
         # 日志面板已在主对话框中，这里只显示导出功能
         layout.addWidget(self._card_export())
-        layout.addStretch()
+        # 移除addStretch，让内容充分利用空间
     
     def _card_export(self) -> QGroupBox:
         """结果导出"""
         box = QGroupBox("结果导出")
+        self._set_groupbox_expanding(box)
         v = QVBoxLayout(box)
         v.addWidget(QLabel("按类型导出：清洗结果、标准化结果、匹配结果、未匹配数据、关联关系表等。"))
         

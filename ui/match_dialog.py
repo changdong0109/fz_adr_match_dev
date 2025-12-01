@@ -368,7 +368,7 @@ class MatchDialog(QDialog):
         if self.filter_modal is not None:
             try:
                 self.filter_modal.set_target_name(target_name)
-                self.filter_modal.exec_()
+                self.filter_modal.exec()
             except Exception as e:
                 self._log(f"[错误] 打开过滤条件对话框失败：{e}", "error")
     
@@ -377,6 +377,6 @@ class MatchDialog(QDialog):
         if self.match_modal is not None:
             try:
                 self.match_modal.set_target_name(target_name)
-                self.match_modal.exec_()
+                self.match_modal.exec()
             except Exception as e:
                 self._log(f"[错误] 打开字段匹配对话框失败：{e}", "error")

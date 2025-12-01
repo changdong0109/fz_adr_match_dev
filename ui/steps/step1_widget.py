@@ -11,19 +11,13 @@ from qgis.PyQt.QtWidgets import (
     QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QCheckBox,
     QProgressBar, QFileDialog, QAbstractItemView
 )
-from qgis.PyQt.QtGui import QColor, QWheelEvent
+from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal, QSettings
 from ..utils import safe_select_rows, set_resize_mode
 from ..widgets.base_step_widget import BaseStepWidget
+from ..widgets.no_wheel_combo_box import NoWheelComboBox
 # 导入core层（使用相对导入，向上三级到插件根目录）
 from ...core.data_loader import DataLoader
-
-
-class NoWheelComboBox(QComboBox):
-    """禁用滚轮的下拉框"""
-    def wheelEvent(self, event: QWheelEvent):
-        """忽略滚轮事件，防止意外修改"""
-        event.ignore()
 
 
 class ShpConvertThread(QThread):
@@ -206,16 +200,10 @@ class Step1Widget(BaseStepWidget):
         # 文件名
         self.data_sources_table.setItem(row, 1, QTableWidgetItem(file_name))
         
-        # 来源类型下拉框（确保能显示完整内容，禁用滚轮修改）
-        type_combo = NoWheelComboBox()
-        type_combo.addItems(["客户采集数据", "GIS 数据", "其他"])
-        type_combo.setEditable(False)
-        type_combo.setMinimumWidth(140)
-        if source_type in ["客户采集数据", "GIS 数据", "其他"]:
-            type_combo.setCurrentText(source_type)
-        else:
-            type_combo.setCurrentText("其他")
-        self.data_sources_table.setCellWidget(row, 2, type_combo)
+        # 来源类型（只读显示，不允许修改）
+        type_item = QTableWidgetItem(source_type if source_type in ["客户采集数据", "GIS 数据", "其他"] else "其他")
+        type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 禁止编辑
+        self.data_sources_table.setItem(row, 2, type_item)
         
         # 清洗状态
         status_item = QTableWidgetItem(cleaned)
@@ -602,6 +590,9 @@ class Step1Widget(BaseStepWidget):
         self.data_sources_table.setRowCount(0)
         self.data_sources.clear()
         
+        # 从项目缓存加载文件状态（包括 cleaned 和 source_type）
+        file_status_cache = self._load_file_status_from_project_cache(region_info)
+        
         # 扫描文件夹，加载已保存的CSV文件
         folders_to_scan = []
         if customer_folder and os.path.isdir(customer_folder):
@@ -614,19 +605,113 @@ class Step1Widget(BaseStepWidget):
                 for file_name in os.listdir(folder_path):
                     if file_name.lower().endswith('.csv'):
                         file_path = os.path.join(folder_path, file_name)
-                        source_type = "GIS 数据" if folder_type == 'shp' else "客户采集数据"
+                        
+                        # 默认根据文件夹推断类型
+                        default_source_type = "GIS 数据" if folder_type == 'shp' else "客户采集数据"
+                        
+                        # 优先使用缓存中的状态
+                        cached_status = file_status_cache.get(file_name, {})
+                        source_type = cached_status.get('source_type', default_source_type)
+                        cleaned = cached_status.get('cleaned', '未清洗')
                         
                         self.data_sources[file_name] = {
                             'source_path': '',  # 原始路径未知
                             'saved_path': file_path,
                             'source_type': source_type,
-                            'cleaned': '未清洗'
+                            'cleaned': cleaned
                         }
-                        self.add_data_source(file_name, source_type, '未清洗')
+                        self.add_data_source(file_name, source_type, cleaned)
             except Exception as e:
                 self._log(f"[Step1] 扫描文件夹失败 {folder_path}: {e}", "error")
         
         self._log(f"[Step1] 已刷新，找到 {len(self.data_sources)} 个文件", "info")
+    
+    def _load_file_status_from_project_cache(self, region_info: dict) -> dict:
+        """
+        从项目缓存加载文件状态（包括 cleaned 和 source_type）
+        
+        返回格式：{file_name: {"cleaned": "已清洗", "source_type": "客户采集数据"}}
+        兼容旧格式：{file_name: "已清洗"} -> {file_name: {"cleaned": "已清洗"}}
+        """
+        cache_folder = region_info.get('cache_folder', '')
+        if not cache_folder:
+            return {}
+        
+        cache_file = os.path.join(cache_folder, "file_status.json")
+        if not os.path.exists(cache_file):
+            # 兼容旧的 file_cleaned_status.json
+            old_cache_file = os.path.join(cache_folder, "file_cleaned_status.json")
+            if os.path.exists(old_cache_file):
+                try:
+                    import json
+                    with open(old_cache_file, 'r', encoding='utf-8') as f:
+                        old_data = json.load(f)
+                    # 转换旧格式
+                    return {k: {"cleaned": v} if isinstance(v, str) else v for k, v in old_data.items()}
+                except:
+                    return {}
+            return {}
+        
+        try:
+            import json
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # 兼容旧格式
+            return {k: {"cleaned": v} if isinstance(v, str) else v for k, v in data.items()}
+        except:
+            return {}
+    
+    def _save_file_status_to_project_cache(self, file_name: str, status_updates: dict):
+        """
+        保存文件状态到项目缓存
+        
+        Args:
+            file_name: 文件名
+            status_updates: 要更新的状态，如 {"cleaned": "已清洗", "source_type": "客户采集数据"}
+        """
+        global_config = self._get_global_config()
+        if not global_config:
+            return
+        
+        region_info = global_config.get_region_info()
+        cache_folder = region_info.get('cache_folder', '')
+        if not cache_folder:
+            return
+        
+        cache_file = os.path.join(cache_folder, "file_status.json")
+        
+        # 读取现有缓存
+        file_status = {}
+        if os.path.exists(cache_file):
+            try:
+                import json
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    file_status = json.load(f)
+            except:
+                pass
+        
+        # 更新状态
+        if file_name not in file_status:
+            file_status[file_name] = {}
+        file_status[file_name].update(status_updates)
+        
+        # 保存
+        try:
+            import json
+            os.makedirs(cache_folder, exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(file_status, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self._log(f"[Step1] 保存文件状态失败：{e}", "error")
+    
+    def _get_global_config(self):
+        """获取全局配置组件"""
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'global_config'):
+                return parent.global_config
+            parent = parent.parent()
+        return None
     
     def _get_initial_path(self):
         """获取初始路径（用于文件/文件夹选择对话框）"""

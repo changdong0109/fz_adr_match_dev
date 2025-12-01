@@ -45,11 +45,14 @@ QGIS 地址标准化与管网匹配插件 — 轻量化多源数据匹配工具�
 
 **快速使用AI助手开发代码？**
 
+- **⚠️ 强制检查清单** → [AI_DEVELOPMENT_CHECKLIST.md](AI_DEVELOPMENT_CHECKLIST.md) - **每次开发前必须完成**
 - **🚀 快速参考** → [AI_QUICK_REFERENCE.md](AI_QUICK_REFERENCE.md) - 最常用的提示词，一键复制
 - **📝 提示词模板** → [AI_PROMPT_TEMPLATE.md](AI_PROMPT_TEMPLATE.md) - 完整提示词模板库
 - **💡 使用示例** → [AI_PROMPT_EXAMPLES.md](AI_PROMPT_EXAMPLES.md) - 实际使用示例和技巧
 
-**快速开始**：复制 [AI_QUICK_REFERENCE.md](AI_QUICK_REFERENCE.md) 中的提示词，替换 `[功能名称]` 即可使用！
+**快速开始**：
+1. **先查看** [AI_DEVELOPMENT_CHECKLIST.md](AI_DEVELOPMENT_CHECKLIST.md) 了解强制检查清单
+2. **复制** [AI_QUICK_REFERENCE.md](AI_QUICK_REFERENCE.md) 中的提示词，替换 `[功能名称]` 即可使用
 
 ## 📁 项目结构
 

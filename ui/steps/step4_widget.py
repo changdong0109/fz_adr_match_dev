@@ -1,23 +1,22 @@
 """
 Step4: 匹配任务管理Widget
-按原型设计：任务组列表 + 当前任务组配置
+左右分栏布局：左侧任务组列表 + 右侧任务组配置详情
 """
 from typing import Callable, Dict, Optional, List
 from qgis.PyQt.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QCheckBox,
-    QProgressBar, QAbstractItemView, QHeaderView, QTextEdit
+    QProgressBar, QHeaderView, QTextEdit, QSplitter,
+    QListWidget, QListWidgetItem, QFrame, QGroupBox
 )
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import Qt
-from ..utils import safe_select_rows
 from ..widgets.base_step_widget import BaseStepWidget
-from ..collapsible_section import CollapsibleSection
 from ..widgets.no_wheel_combo_box import NoWheelComboBox
 
 
 class Step4Widget(BaseStepWidget):
-    """Step4: 匹配任务管理"""
+    """Step4: 匹配任务管理 - 左右分栏布局"""
     
     def __init__(self, parent=None, log_callback: Optional[Callable[[str, str], None]] = None, 
                  task_manager=None, open_filter_modal: Optional[Callable[[str], None]] = None,
@@ -27,358 +26,351 @@ class Step4Widget(BaseStepWidget):
         self.open_match_modal = open_match_modal or (lambda x: None)
         self.global_config = global_config
         self._task_groups: List[Dict] = []
-        self._current_group_id = None
+        self._current_group_idx = -1
         super().__init__(parent, log_callback, task_manager)
         self._build_ui()
         self._load_demo_data()
     
     def _build_ui(self):
-        """构建UI"""
+        """构建UI - 左右分栏"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 6, 0, 6)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        layout.addWidget(self._card_task_groups())
-        layout.addWidget(self._card_group_config())
-        layout.addStretch(1)
+        # 使用 QSplitter 实现左右分栏
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("step4_splitter")
+        
+        # 左侧面板：任务组列表
+        left_panel = self._build_left_panel()
+        left_panel.setMinimumWidth(220)
+        left_panel.setMaximumWidth(320)
+        splitter.addWidget(left_panel)
+        
+        # 右侧面板：任务组配置详情
+        right_panel = self._build_right_panel()
+        splitter.addWidget(right_panel)
+        
+        # 设置初始比例
+        splitter.setSizes([250, 750])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        
+        layout.addWidget(splitter)
     
-    def _card_task_groups(self) -> QWidget:
-        """匹配任务组列表（多源表）"""
-        section = CollapsibleSection("匹配任务组列表（多源表）", expanded=True)
+    def _build_left_panel(self) -> QWidget:
+        """构建左侧面板：任务组列表"""
+        panel = QFrame()
+        panel.setObjectName("step4_left_panel")
         
-        content = QWidget()
-        v = QVBoxLayout(content)
-        v.setContentsMargins(16, 12, 16, 12)
-        v.setSpacing(8)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         
-        tip = QLabel("每个任务组定义：一个源表 → 若干目标表（带优先级）。任务组之间可以并行执行。")
-        tip.setWordWrap(True)
-        tip.setObjectName("step4_tip")
-        v.addWidget(tip)
+        # 标题
+        title = QLabel("任务组列表")
+        title.setObjectName("step4_panel_title")
+        layout.addWidget(title)
         
-        # 任务组表格
-        self.task_groups_table = QTableWidget(0, 7)
-        self.task_groups_table.setObjectName("step4_task_table")
-        self.task_groups_table.setHorizontalHeaderLabels([
-            "启用", "任务组名称", "源表", "目标表数量", "状态", "进度", "操作"
-        ])
-        self.task_groups_table.setMinimumHeight(140)
-        self.task_groups_table.verticalHeader().setDefaultSectionSize(50)
-        self.task_groups_table.verticalHeader().setVisible(False)
+        # 任务组列表
+        self.task_list = QListWidget()
+        self.task_list.setObjectName("step4_task_list")
+        self.task_list.currentRowChanged.connect(self._on_task_selected)
+        layout.addWidget(self.task_list, 1)
         
-        header = self.task_groups_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 40)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 80)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(4, 70)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 100)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(6, 180)
-        
-        v.addWidget(self.task_groups_table)
-        
+        # 新增按钮
         btn_add = QPushButton("+ 新增任务组")
         btn_add.setObjectName("step4_btn_add")
         btn_add.clicked.connect(self._add_task_group)
-        v.addWidget(btn_add)
+        layout.addWidget(btn_add)
         
-        section.add_widget(content)
-        return section
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setObjectName("step4_separator")
+        layout.addWidget(line)
+        
+        # 批量操作
+        batch_label = QLabel("批量操作")
+        batch_label.setObjectName("step4_batch_label")
+        layout.addWidget(batch_label)
+        
+        btn_run_all = QPushButton("执行选中")
+        btn_run_all.setObjectName("step4_btn_batch_run")
+        btn_run_all.clicked.connect(self._run_selected_groups)
+        layout.addWidget(btn_run_all)
+        
+        btn_stop_all = QPushButton("全部终止")
+        btn_stop_all.setObjectName("step4_btn_batch_stop")
+        btn_stop_all.clicked.connect(self._stop_all_groups)
+        layout.addWidget(btn_stop_all)
+        
+        return panel
     
-    def _card_group_config(self) -> QWidget:
-        """当前任务组配置"""
-        self.config_section = CollapsibleSection("当前任务组配置", expanded=True)
+    def _build_right_panel(self) -> QWidget:
+        """构建右侧面板：任务组配置详情"""
+        panel = QFrame()
+        panel.setObjectName("step4_right_panel")
         
-        content = QWidget()
-        v = QVBoxLayout(content)
-        v.setContentsMargins(16, 12, 16, 12)
-        v.setSpacing(10)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
         
-        # 源表配置
+        # 标题
+        self.config_title = QLabel("请选择一个任务组")
+        self.config_title.setObjectName("step4_config_title")
+        layout.addWidget(self.config_title)
+        
+        # 配置内容容器
+        self.config_container = QWidget()
+        self.config_container.setVisible(False)
+        config_layout = QVBoxLayout(self.config_container)
+        config_layout.setContentsMargins(0, 0, 0, 0)
+        config_layout.setSpacing(12)
+        
+        # ===== 源表配置区域 =====
+        src_group = QGroupBox("源表配置 (From)")
+        src_group.setObjectName("step4_group")
+        src_layout = QVBoxLayout(src_group)
+        src_layout.setSpacing(8)
+        
+        # 源表选择行
         src_row = QHBoxLayout()
-        src_row.addWidget(QLabel("源表（From，仅一个）:"))
-        self.combo_src_table = NoWheelComboBox()
-        self.combo_src_table.setMinimumWidth(300)
-        src_row.addWidget(self.combo_src_table)
-        src_row.addStretch()
-        v.addLayout(src_row)
+        src_row.addWidget(QLabel("源表:"))
+        self.combo_src = NoWheelComboBox()
+        self.combo_src.setObjectName("step4_combo")
+        self.combo_src.setMinimumWidth(250)
+        src_row.addWidget(self.combo_src, 1)
+        src_layout.addLayout(src_row)
         
-        # 源表过滤条件
-        v.addWidget(QLabel("源表过滤条件（可多条，类似 WHERE）:"))
+        # 过滤条件行
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("过滤条件:"))
+        self.lbl_src_filter = QLabel("无")
+        self.lbl_src_filter.setObjectName("step4_filter_status")
+        filter_row.addWidget(self.lbl_src_filter, 1)
+        btn_src_filter = QPushButton("设置过滤条件...")
+        btn_src_filter.setObjectName("step4_btn_config")
+        btn_src_filter.clicked.connect(self._open_src_filter_dialog)
+        filter_row.addWidget(btn_src_filter)
+        src_layout.addLayout(filter_row)
         
-        self.src_cond_table = QTableWidget(0, 5)
-        self.src_cond_table.setObjectName("step4_cond_table")
-        self.src_cond_table.setHorizontalHeaderLabels(["字段", "运算符", "值", "逻辑", "操作"])
-        self.src_cond_table.setMinimumHeight(80)
-        self.src_cond_table.setMaximumHeight(120)
-        self.src_cond_table.verticalHeader().setDefaultSectionSize(32)
-        self.src_cond_table.verticalHeader().setVisible(False)
+        config_layout.addWidget(src_group)
         
-        cond_header = self.src_cond_table.horizontalHeader()
-        cond_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        cond_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        cond_header.resizeSection(1, 80)
-        cond_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        cond_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        cond_header.resizeSection(3, 70)
-        cond_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        cond_header.resizeSection(4, 50)
+        # ===== 目标表列表区域 =====
+        tgt_group = QGroupBox("目标表列表 (To, 按优先级排序)")
+        tgt_group.setObjectName("step4_group")
+        tgt_layout = QVBoxLayout(tgt_group)
+        tgt_layout.setSpacing(8)
         
-        v.addWidget(self.src_cond_table)
-        
-        btn_add_cond = QPushButton("+ 新增条件")
-        btn_add_cond.setObjectName("step4_btn_secondary")
-        btn_add_cond.clicked.connect(self._add_src_cond_row)
-        v.addWidget(btn_add_cond)
-        
-        # 说明/备注
-        remark_row = QHBoxLayout()
-        remark_row.addWidget(QLabel("说明/备注:"))
-        remark_row.addStretch()
-        v.addLayout(remark_row)
-        
-        self.txt_remark = QTextEdit()
-        self.txt_remark.setMaximumHeight(60)
-        self.txt_remark.setPlaceholderText("输入任务组说明...")
-        v.addWidget(self.txt_remark)
-        
-        # 目标表列表
-        v.addWidget(QLabel("目标表列表（优先级从上到下）:"))
-        
-        self.tgt_table = QTableWidget(0, 6)
+        # 目标表表格
+        self.tgt_table = QTableWidget(0, 5)
         self.tgt_table.setObjectName("step4_target_table")
         self.tgt_table.setHorizontalHeaderLabels([
-            "序", "目标表", "过滤条件", "字段匹配对", "匹配方式说明", "操作"
+            "序", "目标表", "过滤条件", "匹配字段", "操作"
         ])
-        self.tgt_table.setMinimumHeight(120)
-        self.tgt_table.verticalHeader().setDefaultSectionSize(36)
         self.tgt_table.verticalHeader().setVisible(False)
+        self.tgt_table.verticalHeader().setDefaultSectionSize(36)
+        self.tgt_table.setMinimumHeight(150)
         
-        tgt_header = self.tgt_table.horizontalHeader()
-        tgt_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        tgt_header.resizeSection(0, 35)
-        tgt_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        tgt_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        tgt_header.resizeSection(2, 90)
-        tgt_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        tgt_header.resizeSection(3, 100)
-        tgt_header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        tgt_header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        tgt_header.resizeSection(5, 100)
+        header = self.tgt_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 35)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(2, 80)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(3, 80)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(4, 100)
         
-        v.addWidget(self.tgt_table)
+        tgt_layout.addWidget(self.tgt_table)
         
-        btn_add_target = QPushButton("+ 新增目标表")
-        btn_add_target.setObjectName("step4_btn_add")
-        btn_add_target.clicked.connect(self._add_target_row)
-        v.addWidget(btn_add_target)
+        # 新增目标表按钮
+        btn_add_tgt = QPushButton("+ 新增目标表")
+        btn_add_tgt.setObjectName("step4_btn_add_target")
+        btn_add_tgt.clicked.connect(self._add_target_row)
+        tgt_layout.addWidget(btn_add_tgt)
         
-        self.config_section.add_widget(content)
-        return self.config_section
+        config_layout.addWidget(tgt_group, 1)
+        
+        # ===== 备注区域 =====
+        remark_row = QHBoxLayout()
+        remark_row.addWidget(QLabel("备注:"))
+        self.txt_remark = QLineEdit()
+        self.txt_remark.setObjectName("step4_remark")
+        self.txt_remark.setPlaceholderText("输入任务组说明...")
+        remark_row.addWidget(self.txt_remark, 1)
+        config_layout.addLayout(remark_row)
+        
+        # ===== 操作按钮区域 =====
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        
+        btn_save = QPushButton("保存配置")
+        btn_save.setObjectName("step4_btn_save")
+        btn_save.clicked.connect(self._save_current_config)
+        btn_row.addWidget(btn_save)
+        
+        btn_run = QPushButton("执行任务")
+        btn_run.setObjectName("step4_btn_run")
+        btn_run.clicked.connect(self._run_current_group)
+        btn_row.addWidget(btn_run)
+        
+        btn_delete = QPushButton("删除任务组")
+        btn_delete.setObjectName("step4_btn_delete")
+        btn_delete.clicked.connect(self._delete_current_group)
+        btn_row.addWidget(btn_delete)
+        
+        config_layout.addLayout(btn_row)
+        
+        layout.addWidget(self.config_container, 1)
+        
+        # 空状态提示
+        self.empty_hint = QLabel("← 请从左侧选择或新建一个任务组")
+        self.empty_hint.setObjectName("step4_empty_hint")
+        self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.empty_hint, 1)
+        
+        return panel
     
     def _load_demo_data(self):
         """加载示例数据"""
         self._task_groups = [
             {
-                "id": "g1",
-                "name": "任务组1：客户地址 ↔ 门牌库 & 小区库",
+                "name": "客户地址匹配门牌库",
                 "enabled": True,
-                "source": "客户采集数据_2025Q1_std.csv",
-                "source_conditions": [
-                    {"field": "cust_district", "op": "=", "value": "鼓楼区", "logic": "AND"}
-                ],
-                "remark": "示例：\n1）只匹配鼓楼区的居民/商业客户；\n2）先用门牌库匹配，剩余未命中再用小区库；",
+                "source": "客户采集数据_2025Q1.csv",
+                "source_filter": "",
+                "remark": "先门牌库精确匹配，未命中用小区库兜底",
                 "targets": [
-                    {"table": "门牌库_市政_std.csv", "match_desc": "std_full_addr ↔ mp_full_addr"},
-                    {"table": "小区地址库_std.xlsx", "match_desc": "community_name ↔ community_name"}
+                    {"table": "门牌库_市政.csv", "filter": "", "match_fields": "std_addr ↔ mp_addr"},
+                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": "community ↔ name"}
                 ],
-                "status": "未执行",
+                "status": "待执行",
                 "progress": 0
             },
             {
-                "id": "g2",
-                "name": "任务组2：补录地址 ↔ 小区库 & GIS",
+                "name": "补录地址匹配",
                 "enabled": True,
-                "source": "补录地址库_std.csv",
-                "source_conditions": [],
+                "source": "补录地址库.csv",
+                "source_filter": "",
                 "remark": "",
                 "targets": [
-                    {"table": "小区地址库_std.xlsx", "match_desc": ""},
-                    {"table": "GIS_小区点位_std.shp", "match_desc": ""}
+                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": ""},
+                    {"table": "GIS_小区点位.shp", "filter": "", "match_fields": ""}
                 ],
-                "status": "未执行",
+                "status": "待执行",
                 "progress": 0
             }
         ]
         
-        # 初始化源表下拉框
-        self.combo_src_table.clear()
-        self.combo_src_table.addItems([
-            "客户采集数据_2025Q1_std.csv",
-            "补录地址库_std.csv",
-            "小区地址库_std.xlsx"
+        # 初始化源表下拉框选项
+        self.combo_src.clear()
+        self.combo_src.addItems([
+            "客户采集数据_2025Q1.csv",
+            "补录地址库.csv",
+            "小区地址库.xlsx"
         ])
         
-        self._refresh_task_groups_table()
-        
-        # 默认显示第一个任务组配置
-        if self._task_groups:
-            self._open_group_config(self._task_groups[0]["id"])
+        self._refresh_task_list()
     
-    def _refresh_task_groups_table(self):
-        """刷新任务组列表"""
-        self.task_groups_table.setRowCount(len(self._task_groups))
+    def _refresh_task_list(self):
+        """刷新左侧任务组列表"""
+        self.task_list.clear()
         
-        for r, group in enumerate(self._task_groups):
-            gid = group["id"]
+        for i, group in enumerate(self._task_groups):
+            # 格式：任务名称 + 源表→目标数
+            target_count = len(group.get("targets", []))
+            text = f"{group['name']}\n{group['source']} → {target_count}个目标表\n[{group['status']}]"
             
-            # 启用复选框
-            chk = QCheckBox()
-            chk.setChecked(group.get("enabled", True))
-            chk_widget = QWidget()
-            chk_layout = QHBoxLayout(chk_widget)
-            chk_layout.addWidget(chk)
-            chk_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            chk_layout.setContentsMargins(0, 0, 0, 0)
-            self.task_groups_table.setCellWidget(r, 0, chk_widget)
+            item = QListWidgetItem(text)
+            item.setData(Qt.ItemDataRole.UserRole, i)
             
-            # 任务组名称
-            self.task_groups_table.setItem(r, 1, QTableWidgetItem(group["name"]))
+            # 根据状态设置颜色
+            if group["status"] == "执行中":
+                item.setForeground(QColor("#2563eb"))
+            elif group["status"] == "已完成":
+                item.setForeground(QColor("#16a34a"))
+            elif group["status"] == "已终止":
+                item.setForeground(QColor("#dc2626"))
             
-            # 源表
-            self.task_groups_table.setItem(r, 2, QTableWidgetItem(group["source"]))
-            
-            # 目标表数量
-            self.task_groups_table.setItem(r, 3, QTableWidgetItem(str(len(group.get("targets", [])))))
-            
-            # 状态
-            status = group.get("status", "未执行")
-            status_item = QTableWidgetItem(status)
-            self.task_groups_table.setItem(r, 4, status_item)
-            
-            # 进度条
-            bar = QProgressBar()
-            bar.setValue(group.get("progress", 0))
-            bar.setTextVisible(False)
-            bar.setMaximumHeight(10)
-            self.task_groups_table.setCellWidget(r, 5, bar)
-            
-            # 操作列
-            op_widget = QWidget()
-            op_layout = QVBoxLayout(op_widget)
-            op_layout.setContentsMargins(2, 2, 2, 2)
-            op_layout.setSpacing(2)
-            
-            # 进度标签
-            lbl = QLabel("空闲" if group.get("progress", 0) == 0 else f"{group.get('progress', 0)}%")
-            lbl.setStyleSheet("font-size: 10px; color: #6b7280;")
-            op_layout.addWidget(lbl)
-            
-            # 按钮行
-            btn_row = QHBoxLayout()
-            btn_row.setSpacing(2)
-            
-            btn_run = QPushButton("执行")
-            btn_run.setObjectName("step4_btn_small_run")
-            btn_run.clicked.connect(lambda checked, g=gid: self._run_task_group(g))
-            btn_row.addWidget(btn_run)
-            
-            btn_pause = QPushButton("暂停")
-            btn_pause.setObjectName("step4_btn_small")
-            btn_pause.clicked.connect(lambda checked, g=gid: self._pause_task_group(g))
-            btn_row.addWidget(btn_pause)
-            
-            btn_stop = QPushButton("终止")
-            btn_stop.setObjectName("step4_btn_small_del")
-            btn_stop.clicked.connect(lambda checked, g=gid: self._stop_task_group(g))
-            btn_row.addWidget(btn_stop)
-            
-            op_layout.addLayout(btn_row)
-            
-            # 配置链接
-            btn_config = QPushButton("配置")
-            btn_config.setObjectName("step4_btn_link")
-            btn_config.clicked.connect(lambda checked, g=gid: self._open_group_config(g))
-            op_layout.addWidget(btn_config)
-            
-            self.task_groups_table.setCellWidget(r, 6, op_widget)
+            self.task_list.addItem(item)
+        
+        # 恢复选中状态
+        if 0 <= self._current_group_idx < len(self._task_groups):
+            self.task_list.setCurrentRow(self._current_group_idx)
     
-    def _open_group_config(self, group_id: str):
-        """打开任务组配置"""
-        self._current_group_id = group_id
-        group = None
-        for g in self._task_groups:
-            if g["id"] == group_id:
-                group = g
-                break
-        
-        if not group:
+    def _on_task_selected(self, row: int):
+        """任务组选中事件"""
+        if row < 0 or row >= len(self._task_groups):
+            self._current_group_idx = -1
+            self.config_container.setVisible(False)
+            self.empty_hint.setVisible(True)
+            self.config_title.setText("请选择一个任务组")
             return
         
+        self._current_group_idx = row
+        self._load_group_config(row)
+    
+    def _load_group_config(self, idx: int):
+        """加载任务组配置到右侧面板"""
+        if idx < 0 or idx >= len(self._task_groups):
+            return
+        
+        group = self._task_groups[idx]
+        
+        # 显示配置面板
+        self.config_container.setVisible(True)
+        self.empty_hint.setVisible(False)
+        
         # 更新标题
-        self.config_section.set_title(f"当前任务组配置：{group['name']}")
+        self.config_title.setText(f"任务组配置：{group['name']}")
         
         # 更新源表
-        idx = self.combo_src_table.findText(group.get("source", ""))
-        if idx >= 0:
-            self.combo_src_table.setCurrentIndex(idx)
+        src_idx = self.combo_src.findText(group.get("source", ""))
+        if src_idx >= 0:
+            self.combo_src.setCurrentIndex(src_idx)
         
         # 更新源表过滤条件
-        conditions = group.get("source_conditions", [])
-        self.src_cond_table.setRowCount(len(conditions))
-        for r, cond in enumerate(conditions):
-            self.src_cond_table.setItem(r, 0, QTableWidgetItem(cond.get("field", "")))
-            
-            op_combo = NoWheelComboBox()
-            op_combo.addItems(["=", "IN", "LIKE", "!=", ">", "<"])
-            op_combo.setCurrentText(cond.get("op", "="))
-            self.src_cond_table.setCellWidget(r, 1, op_combo)
-            
-            self.src_cond_table.setItem(r, 2, QTableWidgetItem(cond.get("value", "")))
-            
-            logic_combo = NoWheelComboBox()
-            logic_combo.addItems(["AND", "OR"])
-            logic_combo.setCurrentText(cond.get("logic", "AND"))
-            self.src_cond_table.setCellWidget(r, 3, logic_combo)
-            
-            btn_del = QPushButton("删")
-            btn_del.setObjectName("step4_btn_small_del")
-            btn_del.clicked.connect(lambda checked, row=r: self._del_src_cond_row(row))
-            self.src_cond_table.setCellWidget(r, 4, btn_del)
+        src_filter = group.get("source_filter", "")
+        self.lbl_src_filter.setText(src_filter if src_filter else "无")
         
         # 更新备注
-        self.txt_remark.setPlainText(group.get("remark", ""))
+        self.txt_remark.setText(group.get("remark", ""))
         
         # 更新目标表列表
-        targets = group.get("targets", [])
+        self._refresh_target_table(group.get("targets", []))
+        
+        self._log(f"[Step4] 加载任务组配置: {group['name']}", "info")
+    
+    def _refresh_target_table(self, targets: List[Dict]):
+        """刷新目标表表格"""
         self.tgt_table.setRowCount(len(targets))
+        
         for r, target in enumerate(targets):
+            # 序号
             self.tgt_table.setItem(r, 0, QTableWidgetItem(str(r + 1)))
             
-            tgt_combo = NoWheelComboBox()
-            tgt_combo.setEditable(True)
-            tgt_combo.addItems(["门牌库_市政_std.csv", "小区地址库_std.xlsx", "GIS_小区点位_std.shp"])
-            tgt_combo.setCurrentText(target.get("table", ""))
-            self.tgt_table.setCellWidget(r, 1, tgt_combo)
+            # 目标表（下拉框）
+            combo = NoWheelComboBox()
+            combo.setEditable(True)
+            combo.addItems(["门牌库_市政.csv", "小区地址库.xlsx", "GIS_小区点位.shp"])
+            combo.setCurrentText(target.get("table", ""))
+            self.tgt_table.setCellWidget(r, 1, combo)
             
-            btn_filter = QPushButton("配置过滤条件")
+            # 过滤条件按钮
+            btn_filter = QPushButton("配置")
             btn_filter.setObjectName("step4_btn_link")
-            btn_filter.clicked.connect(lambda checked, t=target.get("table", ""): self.open_filter_modal(t))
+            tgt_name = target.get("table", "")
+            btn_filter.clicked.connect(lambda checked, t=tgt_name: self.open_filter_modal(t))
             self.tgt_table.setCellWidget(r, 2, btn_filter)
             
-            btn_match = QPushButton("配置字段匹配对")
+            # 匹配字段按钮
+            btn_match = QPushButton("配置")
             btn_match.setObjectName("step4_btn_link")
-            btn_match.clicked.connect(lambda checked, t=target.get("table", ""): self.open_match_modal(t))
+            btn_match.clicked.connect(lambda checked, t=tgt_name: self.open_match_modal(t))
             self.tgt_table.setCellWidget(r, 3, btn_match)
-            
-            desc_item = QTableWidgetItem(target.get("match_desc", ""))
-            desc_item.setForeground(QColor("#6b7280"))
-            self.tgt_table.setItem(r, 4, desc_item)
             
             # 操作按钮
             op_widget = QWidget()
@@ -386,206 +378,174 @@ class Step4Widget(BaseStepWidget):
             op_layout.setContentsMargins(2, 2, 2, 2)
             op_layout.setSpacing(2)
             
-            btn_up = QPushButton("上")
+            btn_up = QPushButton("↑")
             btn_up.setObjectName("step4_btn_tiny")
-            btn_up.clicked.connect(lambda checked, row=r: self._move_target_row(row, -1))
+            btn_up.setFixedWidth(24)
+            btn_up.clicked.connect(lambda checked, row=r: self._move_target(row, -1))
             op_layout.addWidget(btn_up)
             
-            btn_down = QPushButton("下")
+            btn_down = QPushButton("↓")
             btn_down.setObjectName("step4_btn_tiny")
-            btn_down.clicked.connect(lambda checked, row=r: self._move_target_row(row, 1))
+            btn_down.setFixedWidth(24)
+            btn_down.clicked.connect(lambda checked, row=r: self._move_target(row, 1))
             op_layout.addWidget(btn_down)
             
             btn_del = QPushButton("删")
             btn_del.setObjectName("step4_btn_tiny_del")
-            btn_del.clicked.connect(lambda checked, row=r: self._del_target_row(row))
+            btn_del.setFixedWidth(24)
+            btn_del.clicked.connect(lambda checked, row=r: self._delete_target(row))
             op_layout.addWidget(btn_del)
             
-            self.tgt_table.setCellWidget(r, 5, op_widget)
-        
-        self._log(f"[Step4] 打开 {group_id} 配置", "info")
+            self.tgt_table.setCellWidget(r, 4, op_widget)
     
     def _add_task_group(self):
         """新增任务组"""
-        new_id = f"g{len(self._task_groups) + 1}"
         new_group = {
-            "id": new_id,
             "name": f"新任务组{len(self._task_groups) + 1}",
             "enabled": True,
             "source": "",
-            "source_conditions": [],
+            "source_filter": "",
             "remark": "",
             "targets": [],
-            "status": "未配置",
+            "status": "待配置",
             "progress": 0
         }
         self._task_groups.append(new_group)
-        self._refresh_task_groups_table()
-        self._open_group_config(new_id)
+        self._refresh_task_list()
+        
+        # 选中新任务组
+        self.task_list.setCurrentRow(len(self._task_groups) - 1)
         self._log(f"[Step4] 新增任务组: {new_group['name']}", "info")
     
-    def _run_task_group(self, group_id: str):
-        """执行任务组"""
-        for group in self._task_groups:
-            if group["id"] == group_id:
-                group["status"] = "执行中"
-                self._log(f"[Step4] 开始执行任务组: {group['name']}", "info")
-                break
-        self._refresh_task_groups_table()
+    def _add_target_row(self):
+        """新增目标表"""
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        group["targets"].append({
+            "table": "",
+            "filter": "",
+            "match_fields": ""
+        })
+        self._refresh_target_table(group["targets"])
+        self._log("[Step4] 新增目标表", "info")
     
-    def _pause_task_group(self, group_id: str):
-        """暂停任务组"""
-        for group in self._task_groups:
-            if group["id"] == group_id:
-                group["status"] = "已暂停"
-                self._log(f"[Step4] 暂停任务组: {group['name']}", "warn")
-                break
-        self._refresh_task_groups_table()
-    
-    def _stop_task_group(self, group_id: str):
-        """终止任务组"""
-        for group in self._task_groups:
-            if group["id"] == group_id:
-                group["status"] = "已终止"
-                group["progress"] = 0
-                self._log(f"[Step4] 终止任务组: {group['name']}", "warn")
-                break
-        self._refresh_task_groups_table()
-    
-    def _add_src_cond_row(self):
-        """添加源表过滤条件行"""
-        row = self.src_cond_table.rowCount()
-        self.src_cond_table.insertRow(row)
+    def _move_target(self, row: int, direction: int):
+        """移动目标表"""
+        if self._current_group_idx < 0:
+            return
         
-        self.src_cond_table.setItem(row, 0, QTableWidgetItem(""))
-        
-        op_combo = NoWheelComboBox()
-        op_combo.addItems(["=", "IN", "LIKE", "!=", ">", "<"])
-        self.src_cond_table.setCellWidget(row, 1, op_combo)
-        
-        self.src_cond_table.setItem(row, 2, QTableWidgetItem(""))
-        
-        logic_combo = NoWheelComboBox()
-        logic_combo.addItems(["AND", "OR"])
-        self.src_cond_table.setCellWidget(row, 3, logic_combo)
-        
-        btn_del = QPushButton("删")
-        btn_del.setObjectName("step4_btn_small_del")
-        btn_del.clicked.connect(lambda checked, r=row: self._del_src_cond_row(r))
-        self.src_cond_table.setCellWidget(row, 4, btn_del)
-    
-    def _del_src_cond_row(self, row: int):
-        """删除源表过滤条件行"""
-        # 获取当前行的按钮
+        # 查找实际行号
         sender = self.sender()
         if sender:
-            # 查找按钮所在的行
-            for r in range(self.src_cond_table.rowCount()):
-                widget = self.src_cond_table.cellWidget(r, 4)
-                if widget is sender:
+            for r in range(self.tgt_table.rowCount()):
+                widget = self.tgt_table.cellWidget(r, 4)
+                if widget and sender in widget.findChildren(QPushButton):
                     row = r
                     break
         
-        self.src_cond_table.removeRow(row)
-    
-    def _add_target_row(self):
-        """添加目标表行"""
-        row = self.tgt_table.rowCount()
-        self.tgt_table.insertRow(row)
-        
-        self.tgt_table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
-        
-        tgt_combo = NoWheelComboBox()
-        tgt_combo.setEditable(True)
-        tgt_combo.addItems(["门牌库_市政_std.csv", "小区地址库_std.xlsx", "GIS_小区点位_std.shp"])
-        self.tgt_table.setCellWidget(row, 1, tgt_combo)
-        
-        btn_filter = QPushButton("配置过滤条件")
-        btn_filter.setObjectName("step4_btn_link")
-        btn_filter.clicked.connect(lambda checked: self.open_filter_modal("新目标表"))
-        self.tgt_table.setCellWidget(row, 2, btn_filter)
-        
-        btn_match = QPushButton("配置字段匹配对")
-        btn_match.setObjectName("step4_btn_link")
-        btn_match.clicked.connect(lambda checked: self.open_match_modal("新目标表"))
-        self.tgt_table.setCellWidget(row, 3, btn_match)
-        
-        self.tgt_table.setItem(row, 4, QTableWidgetItem(""))
-        
-        op_widget = QWidget()
-        op_layout = QHBoxLayout(op_widget)
-        op_layout.setContentsMargins(2, 2, 2, 2)
-        op_layout.setSpacing(2)
-        
-        btn_up = QPushButton("上")
-        btn_up.setObjectName("step4_btn_tiny")
-        btn_up.clicked.connect(lambda checked, r=row: self._move_target_row(r, -1))
-        op_layout.addWidget(btn_up)
-        
-        btn_down = QPushButton("下")
-        btn_down.setObjectName("step4_btn_tiny")
-        btn_down.clicked.connect(lambda checked, r=row: self._move_target_row(r, 1))
-        op_layout.addWidget(btn_down)
-        
-        btn_del = QPushButton("删")
-        btn_del.setObjectName("step4_btn_tiny_del")
-        btn_del.clicked.connect(lambda checked, r=row: self._del_target_row(r))
-        op_layout.addWidget(btn_del)
-        
-        self.tgt_table.setCellWidget(row, 5, op_widget)
-        
-        self._log("[Step4] 添加目标表", "info")
-    
-    def _move_target_row(self, row: int, direction: int):
-        """移动目标表行"""
-        # 获取当前行的按钮
-        sender = self.sender()
-        if sender:
-            # 查找按钮所在的行
-            for r in range(self.tgt_table.rowCount()):
-                widget = self.tgt_table.cellWidget(r, 5)
-                if widget:
-                    for child in widget.findChildren(QPushButton):
-                        if child is sender:
-                            row = r
-                            break
-        
+        group = self._task_groups[self._current_group_idx]
+        targets = group["targets"]
         new_row = row + direction
-        if new_row < 0 or new_row >= self.tgt_table.rowCount():
+        
+        if 0 <= new_row < len(targets):
+            targets[row], targets[new_row] = targets[new_row], targets[row]
+            self._refresh_target_table(targets)
+            self._log(f"[Step4] 移动目标表 {row+1} → {new_row+1}", "info")
+    
+    def _delete_target(self, row: int):
+        """删除目标表"""
+        if self._current_group_idx < 0:
             return
         
-        # 更新数据模型
-        if self._current_group_id:
-            for group in self._task_groups:
-                if group["id"] == self._current_group_id:
-                    targets = group.get("targets", [])
-                    if 0 <= row < len(targets) and 0 <= new_row < len(targets):
-                        targets[row], targets[new_row] = targets[new_row], targets[row]
-                        self._open_group_config(self._current_group_id)
-                        self._log(f"[Step4] 移动目标表行 {row+1} -> {new_row+1}", "info")
-                    break
-    
-    def _del_target_row(self, row: int):
-        """删除目标表行"""
-        # 获取当前行的按钮
+        # 查找实际行号
         sender = self.sender()
         if sender:
-            # 查找按钮所在的行
             for r in range(self.tgt_table.rowCount()):
-                widget = self.tgt_table.cellWidget(r, 5)
-                if widget:
-                    for child in widget.findChildren(QPushButton):
-                        if child is sender:
-                            row = r
-                            break
-        
-        # 更新数据模型
-        if self._current_group_id:
-            for group in self._task_groups:
-                if group["id"] == self._current_group_id:
-                    targets = group.get("targets", [])
-                    if 0 <= row < len(targets):
-                        del targets[row]
-                        self._open_group_config(self._current_group_id)
-                        self._log(f"[Step4] 删除目标表行 {row+1}", "info")
+                widget = self.tgt_table.cellWidget(r, 4)
+                if widget and sender in widget.findChildren(QPushButton):
+                    row = r
                     break
+        
+        group = self._task_groups[self._current_group_idx]
+        if 0 <= row < len(group["targets"]):
+            del group["targets"][row]
+            self._refresh_target_table(group["targets"])
+            self._log(f"[Step4] 删除目标表 {row+1}", "info")
+    
+    def _open_src_filter_dialog(self):
+        """打开源表过滤条件对话框"""
+        if self._current_group_idx < 0:
+            return
+        group = self._task_groups[self._current_group_idx]
+        self.open_filter_modal(group.get("source", "源表"))
+    
+    def _save_current_config(self):
+        """保存当前任务组配置"""
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        group["source"] = self.combo_src.currentText()
+        group["remark"] = self.txt_remark.text()
+        
+        # 更新目标表
+        targets = []
+        for r in range(self.tgt_table.rowCount()):
+            combo = self.tgt_table.cellWidget(r, 1)
+            if combo:
+                targets.append({
+                    "table": combo.currentText(),
+                    "filter": "",
+                    "match_fields": ""
+                })
+        group["targets"] = targets
+        group["status"] = "待执行"
+        
+        self._refresh_task_list()
+        self._log(f"[Step4] 保存任务组配置: {group['name']}", "info")
+    
+    def _run_current_group(self):
+        """执行当前任务组"""
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        group["status"] = "执行中"
+        self._refresh_task_list()
+        self._log(f"[Step4] 开始执行任务组: {group['name']}", "info")
+    
+    def _delete_current_group(self):
+        """删除当前任务组"""
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        del self._task_groups[self._current_group_idx]
+        self._current_group_idx = -1
+        self._refresh_task_list()
+        
+        # 隐藏配置面板
+        self.config_container.setVisible(False)
+        self.empty_hint.setVisible(True)
+        self.config_title.setText("请选择一个任务组")
+        
+        self._log(f"[Step4] 删除任务组: {group['name']}", "info")
+    
+    def _run_selected_groups(self):
+        """执行选中的任务组"""
+        for group in self._task_groups:
+            if group.get("enabled", True):
+                group["status"] = "执行中"
+        self._refresh_task_list()
+        self._log("[Step4] 开始执行所有启用的任务组", "info")
+    
+    def _stop_all_groups(self):
+        """终止所有任务组"""
+        for group in self._task_groups:
+            if group["status"] == "执行中":
+                group["status"] = "已终止"
+                group["progress"] = 0
+        self._refresh_task_list()
+        self._log("[Step4] 终止所有任务组", "warn")

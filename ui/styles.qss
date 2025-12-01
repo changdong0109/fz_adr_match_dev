@@ -1182,40 +1182,143 @@ QPushButton#result_dialog_ok_btn:pressed {
     background-color: #096dd9;
 }
 
-/* ========== Step4 匹配任务管理样式 ========== */
+/* ========== Step4 匹配任务管理样式 - 左右分栏布局 ========== */
 
-QLabel#step4_tip {
-    font-size: 12px;
-    color: #6b7280;
-    padding: 8px 12px;
-    background-color: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 4px;
+/* 左侧面板 */
+QFrame#step4_left_panel {
+    background-color: #f8fafc;
+    border-right: 1px solid #e2e8f0;
 }
 
-QLabel#step4_section_label {
-    font-size: 13px;
+QLabel#step4_panel_title {
+    font-size: 14px;
     font-weight: 600;
-    color: #1e3a5f;
+    color: #1e293b;
     padding: 4px 0;
 }
 
-QLabel#step4_filter_label {
-    font-size: 12px;
-    color: #6b7280;
-    padding-left: 8px;
-}
-
-QTableWidget#step4_task_table,
-QTableWidget#step4_target_table {
-    border: 1px solid #d0d0d0;
+QListWidget#step4_task_list {
+    border: 1px solid #e2e8f0;
     border-radius: 4px;
     background-color: #ffffff;
-    gridline-color: #e5e7eb;
+    font-size: 12px;
+    outline: none;
+}
+
+QListWidget#step4_task_list::item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+QListWidget#step4_task_list::item:selected {
+    background-color: #e0f2fe;
+    border-left: 3px solid #0284c7;
+}
+
+QListWidget#step4_task_list::item:hover:!selected {
+    background-color: #f1f5f9;
+}
+
+QFrame#step4_separator {
+    color: #e2e8f0;
+    margin: 8px 0;
+}
+
+QLabel#step4_batch_label {
+    font-size: 11px;
+    color: #64748b;
+    padding: 4px 0;
+}
+
+QPushButton#step4_btn_batch_run {
+    padding: 6px 12px;
+    font-size: 12px;
+    background-color: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_batch_run:hover {
+    background-color: #0369a1;
+}
+
+QPushButton#step4_btn_batch_stop {
+    padding: 6px 12px;
+    font-size: 12px;
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_batch_stop:hover {
+    background-color: #e2e8f0;
+}
+
+/* 右侧面板 */
+QFrame#step4_right_panel {
+    background-color: #ffffff;
+}
+
+QLabel#step4_config_title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 4px 0;
+}
+
+QLabel#step4_empty_hint {
+    font-size: 14px;
+    color: #94a3b8;
+}
+
+QGroupBox#step4_group {
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 12px;
+    padding-top: 10px;
+}
+
+QGroupBox#step4_group::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    background-color: #ffffff;
+}
+
+QLabel#step4_filter_status {
+    font-size: 12px;
+    color: #64748b;
+    padding: 4px 8px;
+    background-color: #f8fafc;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_config {
+    padding: 4px 12px;
+    font-size: 12px;
+    background-color: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_config:hover {
+    background-color: #e2e8f0;
+}
+
+QTableWidget#step4_target_table {
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    gridline-color: #f1f5f9;
     font-size: 12px;
 }
 
-QTableWidget#step4_task_table::item,
 QTableWidget#step4_target_table::item {
     padding: 6px 8px;
 }
@@ -1223,54 +1326,77 @@ QTableWidget#step4_target_table::item {
 NoWheelComboBox#step4_combo,
 QComboBox#step4_combo {
     padding: 6px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
     background-color: white;
     font-size: 12px;
 }
 
-QPushButton#step4_btn_add {
-    padding: 6px 14px;
+QLineEdit#step4_remark {
+    padding: 8px 12px;
     font-size: 12px;
-    background-color: #3b82f6;
-    color: white;
-    border: none;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
-}
-
-QPushButton#step4_btn_add:hover {
-    background-color: #2563eb;
-}
-
-QPushButton#step4_btn_run {
-    padding: 6px 14px;
-    font-size: 12px;
-    background-color: #10b981;
-    color: white;
-    border: none;
-    border-radius: 4px;
-}
-
-QPushButton#step4_btn_run:hover {
-    background-color: #059669;
+    background-color: #ffffff;
 }
 
 QPushButton#step4_btn_save {
     padding: 8px 20px;
     font-size: 13px;
-    background-color: #3b82f6;
+    background-color: #0284c7;
     color: white;
     border: none;
     border-radius: 4px;
 }
 
 QPushButton#step4_btn_save:hover {
-    background-color: #2563eb;
+    background-color: #0369a1;
+}
+
+QPushButton#step4_btn_run {
+    padding: 8px 20px;
+    font-size: 13px;
+    background-color: #16a34a;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_run:hover {
+    background-color: #15803d;
+}
+
+QPushButton#step4_btn_delete {
+    padding: 8px 20px;
+    font-size: 13px;
+    background-color: #f1f5f9;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_delete:hover {
+    background-color: #fee2e2;
+}
+
+QPushButton#step4_btn_add,
+QPushButton#step4_btn_add_target {
+    padding: 6px 14px;
+    font-size: 12px;
+    background-color: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_add:hover,
+QPushButton#step4_btn_add_target:hover {
+    background-color: #0369a1;
 }
 
 QPushButton#step4_btn_link {
     font-size: 11px;
-    color: #3b82f6;
+    color: #0284c7;
     border: none;
     background: transparent;
     text-decoration: underline;
@@ -1278,51 +1404,25 @@ QPushButton#step4_btn_link {
 }
 
 QPushButton#step4_btn_link:hover {
-    color: #1d4ed8;
-}
-
-QPushButton#step4_btn_small_run {
-    font-size: 11px;
-    padding: 4px 10px;
-    background-color: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 3px;
-}
-
-QPushButton#step4_btn_small_run:hover {
-    background-color: #2563eb;
-}
-
-QPushButton#step4_btn_small_del {
-    font-size: 11px;
-    padding: 4px 10px;
-    background-color: #ef4444;
-    color: white;
-    border: none;
-    border-radius: 3px;
-}
-
-QPushButton#step4_btn_small_del:hover {
-    background-color: #dc2626;
+    color: #0369a1;
 }
 
 QPushButton#step4_btn_tiny {
-    font-size: 11px;
-    padding: 2px 8px;
-    background-color: #f3f4f6;
-    color: #374151;
-    border: 1px solid #d1d5db;
+    font-size: 12px;
+    padding: 2px 4px;
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
     border-radius: 3px;
 }
 
 QPushButton#step4_btn_tiny:hover {
-    background-color: #e5e7eb;
+    background-color: #e2e8f0;
 }
 
 QPushButton#step4_btn_tiny_del {
-    font-size: 11px;
-    padding: 2px 8px;
+    font-size: 12px;
+    padding: 2px 4px;
     background-color: #fef2f2;
     color: #dc2626;
     border: 1px solid #fecaca;
@@ -1331,44 +1431,6 @@ QPushButton#step4_btn_tiny_del {
 
 QPushButton#step4_btn_tiny_del:hover {
     background-color: #fee2e2;
-}
-
-QPushButton#step4_btn_small {
-    font-size: 11px;
-    padding: 4px 10px;
-    background-color: #f3f4f6;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 3px;
-}
-
-QPushButton#step4_btn_small:hover {
-    background-color: #e5e7eb;
-}
-
-QPushButton#step4_btn_secondary {
-    padding: 4px 12px;
-    font-size: 11px;
-    background-color: #f3f4f6;
-    color: #374151;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-}
-
-QPushButton#step4_btn_secondary:hover {
-    background-color: #e5e7eb;
-}
-
-QTableWidget#step4_cond_table {
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    background-color: #ffffff;
-    gridline-color: #e5e7eb;
-    font-size: 12px;
-}
-
-QTableWidget#step4_cond_table::item {
-    padding: 4px 6px;
 }
 
 /* ========== Step5 导出 & 日志样式 ========== */

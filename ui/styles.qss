@@ -1312,6 +1312,20 @@ QPushButton#step4_btn_config:hover {
     background-color: #e2e8f0;
 }
 
+QPushButton#step4_btn_config_done {
+    padding: 4px 12px;
+    font-size: 12px;
+    background-color: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_config_done:hover {
+    background-color: #d1fae5;
+    border-color: #6ee7b7;
+}
+
 QTableWidget#step4_target_table {
     border: 1px solid #e2e8f0;
     border-radius: 4px;

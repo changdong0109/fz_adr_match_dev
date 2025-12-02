@@ -236,15 +236,16 @@ class Step4Widget(BaseStepWidget):
         
         header = self.tgt_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 35)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.resizeSection(0, 35)  # 序
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 目标表
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 70)
+        header.resizeSection(2, 70)  # 过滤条件
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 70)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.resizeSection(3, 70)  # 匹配字段
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(4, 140)  # 匹配方式说明
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 90)
+        header.resizeSection(5, 130)  # 操作（上移+下移+删）
         
         tgt_layout.addWidget(self.tgt_table)
         
@@ -432,33 +433,36 @@ class Step4Widget(BaseStepWidget):
             seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.tgt_table.setItem(r, 0, seq_item)
             
-            # 目标表（下拉框）
+            # 目标表（下拉框 - 不可编辑）
             combo = NoWheelComboBox()
-            combo.setEditable(True)
+            combo.setEditable(False)  # 只能从列表选择
             combo.addItems(self._available_files)
-            combo.setCurrentText(target.get("table", ""))
+            tgt_table_name = target.get("table", "")
+            if tgt_table_name and tgt_table_name in self._available_files:
+                combo.setCurrentText(tgt_table_name)
             combo.setMinimumHeight(30)
             self.tgt_table.setCellWidget(r, 1, combo)
             
             # 过滤条件按钮 - 显示状态
-            filter_text = "已配置" if target.get("filter") else "配置"
-            btn_filter = QPushButton(filter_text)
-            btn_filter.setObjectName("step4_btn_table_link")
-            # 使用 row 索引动态获取当前选择的表名
+            has_filter = bool(target.get("filter"))
+            btn_filter = QPushButton("已配置" if has_filter else "配置")
+            btn_filter.setObjectName("step4_btn_config_done" if has_filter else "step4_btn_config")
             btn_filter.clicked.connect(lambda checked, row=r: self._open_target_filter(row))
             self.tgt_table.setCellWidget(r, 2, btn_filter)
             
             # 匹配字段按钮 - 显示状态
-            match_text = target.get("match_fields", "") or "配置"
-            btn_match = QPushButton(match_text)
-            btn_match.setObjectName("step4_btn_table_link")
+            match_fields = target.get("match_fields", "")
+            has_match = bool(match_fields)
+            btn_match = QPushButton(match_fields if has_match else "配置")
+            btn_match.setObjectName("step4_btn_config_done" if has_match else "step4_btn_config")
             btn_match.clicked.connect(lambda checked, row=r: self._open_target_match(row))
             self.tgt_table.setCellWidget(r, 3, btn_match)
             
-            # 匹配方式说明
+            # 匹配方式说明（只读）
             desc = target.get("match_desc", "")
             desc_item = QTableWidgetItem(desc)
             desc_item.setForeground(QColor("#64748b"))
+            desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 不可编辑
             self.tgt_table.setItem(r, 4, desc_item)
             
             # 操作按钮

@@ -444,15 +444,15 @@ class Step4Widget(BaseStepWidget):
             filter_text = "已配置" if target.get("filter") else "配置"
             btn_filter = QPushButton(filter_text)
             btn_filter.setObjectName("step4_btn_table_link")
-            tgt_name = target.get("table", "")
-            btn_filter.clicked.connect(lambda checked, t=tgt_name: self.open_filter_modal(t))
+            # 使用 row 索引动态获取当前选择的表名
+            btn_filter.clicked.connect(lambda checked, row=r: self._open_target_filter(row))
             self.tgt_table.setCellWidget(r, 2, btn_filter)
             
             # 匹配字段按钮 - 显示状态
             match_text = target.get("match_fields", "") or "配置"
             btn_match = QPushButton(match_text)
             btn_match.setObjectName("step4_btn_table_link")
-            btn_match.clicked.connect(lambda checked, t=tgt_name: self.open_match_modal(t))
+            btn_match.clicked.connect(lambda checked, row=r: self._open_target_match(row))
             self.tgt_table.setCellWidget(r, 3, btn_match)
             
             # 匹配方式说明
@@ -568,8 +568,34 @@ class Step4Widget(BaseStepWidget):
         """打开源表过滤条件对话框"""
         if self._current_group_idx < 0:
             return
-        group = self._task_groups[self._current_group_idx]
-        self.open_filter_modal(group.get("source", "源表"))
+        # 直接从下拉框获取当前选择的源表（而不是从未保存的配置中获取）
+        src_table = self.combo_src.currentText()
+        if not src_table:
+            self._log("[Step4] 请先选择源表", "warning")
+            return
+        self.open_filter_modal(src_table)
+    
+    def _open_target_filter(self, row: int):
+        """打开目标表过滤条件对话框"""
+        # 从表格中获取实际行的下拉框
+        combo = self.tgt_table.cellWidget(row, 1)
+        if combo:
+            tgt_name = combo.currentText()
+            if tgt_name:
+                self.open_filter_modal(tgt_name)
+            else:
+                self._log("[Step4] 请先选择目标表", "warning")
+    
+    def _open_target_match(self, row: int):
+        """打开目标表字段匹配对话框"""
+        # 从表格中获取实际行的下拉框
+        combo = self.tgt_table.cellWidget(row, 1)
+        if combo:
+            tgt_name = combo.currentText()
+            if tgt_name:
+                self.open_match_modal(tgt_name)
+            else:
+                self._log("[Step4] 请先选择目标表", "warning")
     
     def _save_current_config(self):
         """保存当前任务组配置"""

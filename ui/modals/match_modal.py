@@ -7,7 +7,7 @@ import pandas as pd
 from typing import List, Dict, Optional, Callable
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QHeaderView, QGroupBox, QListWidget, QListWidgetItem
+    QPushButton, QHeaderView, QGroupBox, QListWidget, QListWidgetItem, QWidget
 )
 from qgis.PyQt.QtCore import Qt
 from ..widgets.no_wheel_combo_box import NoWheelComboBox
@@ -333,14 +333,20 @@ class MatchModal(QDialog):
         src_item.setFlags(src_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.pair_table.setItem(row, 0, src_item)
         
-        # 匹配方式下拉框
+        # 匹配方式下拉框 - 用容器包装防止溢出
+        combo_container = QWidget()
+        combo_layout = QHBoxLayout(combo_container)
+        combo_layout.setContentsMargins(2, 2, 2, 2)
+        combo_layout.setSpacing(0)
+        
         combo_match = NoWheelComboBox()
         combo_match.setEditable(False)
-        combo_match.setFixedWidth(75)
         combo_match.addItems(["=", "LIKE", "包含", "被包含", "前缀", "后缀"])
         combo_match.setCurrentText(match_type)
         combo_match.setToolTip("= 精确匹配\nLIKE 模糊匹配\n包含 源包含目标\n被包含 目标包含源\n前缀 源以目标开头\n后缀 源以目标结尾")
-        self.pair_table.setCellWidget(row, 1, combo_match)
+        combo_layout.addWidget(combo_match)
+        
+        self.pair_table.setCellWidget(row, 1, combo_container)
         
         # 目标表字段
         tgt_item = QTableWidgetItem(tgt)
@@ -374,7 +380,11 @@ class MatchModal(QDialog):
         for row in range(self.pair_table.rowCount()):
             src_item = self.pair_table.item(row, 0)
             tgt_item = self.pair_table.item(row, 2)
-            combo_match = self.pair_table.cellWidget(row, 1)
+            
+            # 从容器中获取下拉框
+            container = self.pair_table.cellWidget(row, 1)
+            combo_match = container.findChild(NoWheelComboBox) if container else None
+            
             if src_item and tgt_item:
                 pairs.append({
                     "src": src_item.text(),

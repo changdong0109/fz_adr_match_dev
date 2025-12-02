@@ -71,7 +71,7 @@ class GlobalConfigWidget(QWidget):
         row1.addWidget(self.edit_base)
         
         btn_choose = QPushButton("选择根目录")
-        btn_choose.setStyleSheet("font-size: 12px; padding: 4px 8px;")
+        btn_choose.setObjectName("global_config_btn_choose")
         row1.addWidget(btn_choose)
         row1.addStretch()
         layout.addLayout(row1)
@@ -79,42 +79,26 @@ class GlobalConfigWidget(QWidget):
         # 自动生成的目录
         layout.addWidget(QLabel("客户数据目录（自动生成）："))
         self.label_customer = QLineEdit()
+        self.label_customer.setObjectName("global_config_path_display")
         self.label_customer.setReadOnly(True)
-        self.label_customer.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; color: #000000;")
         layout.addWidget(self.label_customer)
         
         layout.addWidget(QLabel("SHP 数据目录（自动生成）："))
         self.label_shp = QLineEdit()
+        self.label_shp.setObjectName("global_config_path_display")
         self.label_shp.setReadOnly(True)
-        self.label_shp.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; color: #000000;")
         layout.addWidget(self.label_shp)
         
         layout.addWidget(QLabel("数据缓存目录（自动生成）："))
         self.label_cache = QLineEdit()
+        self.label_cache.setObjectName("global_config_path_display")
         self.label_cache.setReadOnly(True)
-        self.label_cache.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; color: #000000;")
         layout.addWidget(self.label_cache)
         
         # 确认按钮
         row2 = QHBoxLayout()
         self.btn_confirm_dirs = QPushButton("确认并生成目录")
-        self.btn_confirm_dirs.setStyleSheet("""
-            QPushButton {
-                font-size: 13px;
-                padding: 6px 12px;
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-            QPushButton:disabled {
-                background-color: #c0c0c0;
-            }
-        """)
+        self.btn_confirm_dirs.setObjectName("global_config_btn_confirm")
         row2.addWidget(self.btn_confirm_dirs)
         row2.addStretch()
         layout.addLayout(row2)

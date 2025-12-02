@@ -216,7 +216,7 @@ class Step3Widget(BaseStepWidget):
         
         # 提示文字
         tip = QLabel("提示：配置会保存到本地，解析时自动使用。API 调用结果会缓存，避免重复计费。")
-        tip.setStyleSheet("color: #6b7280; font-size: 12px;")
+        tip.setObjectName("step3_tip_label")
         v.addWidget(tip)
         
         # 加载已保存的配置
@@ -2316,11 +2316,11 @@ class Step3Widget(BaseStepWidget):
         # 标题图标
         title_row = QHBoxLayout()
         icon_label = QLabel("🗑️")
-        icon_label.setStyleSheet("font-size: 32px;")
+        icon_label.setObjectName("clear_dialog_icon")
         title_row.addWidget(icon_label)
         
         title_text = QLabel("选择要清除的数据")
-        title_text.setStyleSheet("font-size: 16px; font-weight: bold; color: #1f2937;")
+        title_text.setObjectName("clear_dialog_title")
         title_row.addWidget(title_text)
         title_row.addStretch()
         layout.addLayout(title_row)
@@ -2328,7 +2328,7 @@ class Step3Widget(BaseStepWidget):
         # 分隔线
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background-color: #e5e7eb;")
+        line.setObjectName("clear_dialog_separator")
         layout.addWidget(line)
         
         # 选项区域
@@ -2339,27 +2339,27 @@ class Step3Widget(BaseStepWidget):
         
         # API 缓存选项
         self.chk_clear_api_cache = QCheckBox("清除 API 调用缓存")
-        self.chk_clear_api_cache.setStyleSheet("font-size: 14px;")
+        self.chk_clear_api_cache.setObjectName("clear_dialog_checkbox")
         tip1 = QLabel("包括内存缓存和磁盘缓存（api_cache.json），清除后重新解析需要调用 API")
-        tip1.setStyleSheet("color: #6b7280; font-size: 12px; margin-left: 24px;")
+        tip1.setObjectName("clear_dialog_tip")
         tip1.setWordWrap(True)
         options_layout.addWidget(self.chk_clear_api_cache)
         options_layout.addWidget(tip1)
         
         # 标准化文件选项
         self.chk_clear_parsed_files = QCheckBox("清除已标准化的文件")
-        self.chk_clear_parsed_files.setStyleSheet("font-size: 14px;")
+        self.chk_clear_parsed_files.setObjectName("clear_dialog_checkbox")
         tip2 = QLabel("删除所有 *_标准化.csv 文件，保留原始清洗后的文件")
-        tip2.setStyleSheet("color: #6b7280; font-size: 12px; margin-left: 24px;")
+        tip2.setObjectName("clear_dialog_tip")
         tip2.setWordWrap(True)
         options_layout.addWidget(self.chk_clear_parsed_files)
         options_layout.addWidget(tip2)
         
         # 解析状态选项
         self.chk_clear_parse_status = QCheckBox("清除解析状态记录")
-        self.chk_clear_parse_status.setStyleSheet("font-size: 14px;")
+        self.chk_clear_parse_status.setObjectName("clear_dialog_checkbox")
         tip3 = QLabel("清除 parse_status.json，文件列表中的解析状态将重置")
-        tip3.setStyleSheet("color: #6b7280; font-size: 12px; margin-left: 24px;")
+        tip3.setObjectName("clear_dialog_tip")
         tip3.setWordWrap(True)
         options_layout.addWidget(self.chk_clear_parse_status)
         options_layout.addWidget(tip3)
@@ -2368,7 +2368,7 @@ class Step3Widget(BaseStepWidget):
         
         # 警告提示
         warning = QLabel("⚠️ 此操作不可撤销，请谨慎选择")
-        warning.setStyleSheet("color: #dc2626; font-size: 12px; padding: 8px; background: #fef2f2; border-radius: 4px;")
+        warning.setObjectName("clear_dialog_warning")
         layout.addWidget(warning)
         
         layout.addSpacerItem(QSpacerItem(20, 10, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
@@ -2383,20 +2383,8 @@ class Step3Widget(BaseStepWidget):
         btn_row.addWidget(btn_cancel)
         
         btn_confirm = QPushButton("确认清除")
+        btn_confirm.setObjectName("clear_dialog_btn_confirm")
         btn_confirm.setMinimumWidth(100)
-        btn_confirm.setStyleSheet("""
-            QPushButton {
-                background-color: #dc2626;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #b91c1c;
-            }
-        """)
         btn_confirm.clicked.connect(lambda: self._execute_clear(dialog))
         btn_row.addWidget(btn_confirm)
         

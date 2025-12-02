@@ -1326,60 +1326,60 @@ QPushButton#step4_btn_config_done:hover {
     border-color: #6ee7b7;
 }
 
-/* 链接样式按钮 - 未配置 */
-QPushButton#step4_link_btn {
+/* 设置按钮 - 未设置 */
+QPushButton#step4_btn_set {
     font-size: 12px;
-    color: #6b7280;
-    background: transparent;
-    border: none;
-    text-decoration: underline;
-    padding: 4px 8px;
-}
-
-QPushButton#step4_link_btn:hover {
+    padding: 4px 10px;
     color: #0284c7;
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 4px;
 }
 
-/* 链接样式按钮 - 已配置 */
-QPushButton#step4_link_btn_done {
+QPushButton#step4_btn_set:hover {
+    background-color: #e0f2fe;
+}
+
+/* 设置按钮 - 已设置 */
+QPushButton#step4_btn_done {
     font-size: 12px;
+    padding: 4px 10px;
     color: #059669;
-    background: transparent;
-    border: none;
-    padding: 4px 8px;
+    background-color: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 4px;
 }
 
-QPushButton#step4_link_btn_done:hover {
-    color: #047857;
-    text-decoration: underline;
+QPushButton#step4_btn_done:hover {
+    background-color: #d1fae5;
 }
 
-/* 操作按钮 */
-QPushButton#step4_op_btn {
-    font-size: 11px;
-    color: #64748b;
-    background-color: #f8fafc;
+/* 操作按钮 - 上/下 */
+QPushButton#step4_btn_op {
+    font-size: 12px;
+    padding: 2px;
+    color: #475569;
+    background-color: #f1f5f9;
     border: 1px solid #e2e8f0;
     border-radius: 3px;
 }
 
-QPushButton#step4_op_btn:hover {
+QPushButton#step4_btn_op:hover {
     background-color: #e2e8f0;
-    color: #334155;
 }
 
-QPushButton#step4_op_btn_del {
+/* 操作按钮 - 删除 */
+QPushButton#step4_btn_del {
     font-size: 12px;
-    font-weight: bold;
-    color: #ef4444;
+    padding: 2px;
+    color: #dc2626;
     background-color: #fef2f2;
     border: 1px solid #fecaca;
     border-radius: 3px;
 }
 
-QPushButton#step4_op_btn_del:hover {
+QPushButton#step4_btn_del:hover {
     background-color: #fee2e2;
-    color: #dc2626;
 }
 
 QTableWidget#step4_target_table {

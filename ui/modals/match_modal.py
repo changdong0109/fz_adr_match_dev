@@ -266,22 +266,22 @@ class MatchModal(QDialog):
             return
         
         src = item.text()
+        tgt = None
         
         # 优先使用右边已选中的
         tgt_item = self.target_list.currentItem()
-        if tgt_item and not tgt_item.text().startswith("("):
+        if tgt_item and tgt_item.text() and not tgt_item.text().startswith("("):
             tgt = tgt_item.text()
         else:
-            # 尝试找同名字段
-            tgt = src if src in self._target_fields else None
-            if tgt:
-                # 自动选中同名字段
-                for i in range(self.target_list.count()):
-                    if self.target_list.item(i).text() == tgt:
-                        self.target_list.setCurrentRow(i)
-                        break
+            # 尝试在右边列表找同名字段
+            for i in range(self.target_list.count()):
+                field = self.target_list.item(i).text()
+                if field == src:
+                    tgt = field
+                    self.target_list.setCurrentRow(i)
+                    break
         
-        if tgt and not self._pair_exists(src, tgt):
+        if src and tgt and not self._pair_exists(src, tgt):
             self._add_pair_to_table(src, tgt)
     
     def _on_target_double_click(self, item: QListWidgetItem):
@@ -290,22 +290,22 @@ class MatchModal(QDialog):
             return
         
         tgt = item.text()
+        src = None
         
         # 优先使用左边已选中的
         src_item = self.source_list.currentItem()
-        if src_item and not src_item.text().startswith("("):
+        if src_item and src_item.text() and not src_item.text().startswith("("):
             src = src_item.text()
         else:
-            # 尝试找同名字段
-            src = tgt if tgt in self._source_fields else None
-            if src:
-                # 自动选中同名字段
-                for i in range(self.source_list.count()):
-                    if self.source_list.item(i).text() == src:
-                        self.source_list.setCurrentRow(i)
-                        break
+            # 尝试在左边列表找同名字段
+            for i in range(self.source_list.count()):
+                field = self.source_list.item(i).text()
+                if field == tgt:
+                    src = field
+                    self.source_list.setCurrentRow(i)
+                    break
         
-        if src and not self._pair_exists(src, tgt):
+        if src and tgt and not self._pair_exists(src, tgt):
             self._add_pair_to_table(src, tgt)
     
     def _pair_exists(self, src: str, tgt: str) -> bool:

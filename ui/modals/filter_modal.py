@@ -277,12 +277,14 @@ class FilterModal(QDialog):
         row = self.cond_table.rowCount()
         self.cond_table.insertRow(row)
         
-        # 字段下拉框
+        # 字段下拉框 - 只能从已有字段中选择，不可编辑
         combo_field = NoWheelComboBox()
-        combo_field.setEditable(True)
+        combo_field.setEditable(False)
         combo_field.addItems(self._fields)
-        if field:
+        if field and field in self._fields:
             combo_field.setCurrentText(field)
+        elif self._fields:
+            combo_field.setCurrentIndex(0)  # 默认选第一个
         combo_field.currentTextChanged.connect(self._update_preview)
         self.cond_table.setCellWidget(row, 0, combo_field)
         

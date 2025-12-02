@@ -331,20 +331,24 @@ class FilterModal(QDialog):
         self._update_preview()
     
     def _update_logic_visibility(self):
-        """更新逻辑列的可见性：最后一行移除逻辑下拉框"""
+        """更新逻辑列的可见性：最后一行隐藏逻辑下拉框"""
         row_count = self.cond_table.rowCount()
         for row in range(row_count):
             is_last_row = (row == row_count - 1)
-            current_widget = self.cond_table.cellWidget(row, 3)
+            logic_widget = self.cond_table.cellWidget(row, 3)
             
             if is_last_row:
-                # 最后一行：移除逻辑下拉框，显示空白
-                if current_widget is not None:
-                    self.cond_table.removeCellWidget(row, 3)
-                    self.cond_table.setItem(row, 3, QTableWidgetItem(""))
+                # 最后一行：隐藏逻辑下拉框（但保留控件）
+                if logic_widget and isinstance(logic_widget, NoWheelComboBox):
+                    logic_widget.setEnabled(False)
+                    logic_widget.setVisible(False)
             else:
-                # 非最后一行：确保有逻辑下拉框
-                if current_widget is None or not isinstance(current_widget, NoWheelComboBox):
+                # 非最后一行：显示逻辑下拉框
+                if logic_widget and isinstance(logic_widget, NoWheelComboBox):
+                    logic_widget.setEnabled(True)
+                    logic_widget.setVisible(True)
+                elif logic_widget is None:
+                    # 如果没有逻辑下拉框，创建一个
                     combo_logic = NoWheelComboBox()
                     combo_logic.addItems(["AND", "OR"])
                     combo_logic.currentTextChanged.connect(self._update_preview)

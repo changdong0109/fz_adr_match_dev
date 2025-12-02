@@ -534,12 +534,14 @@ class Step4Widget(BaseStepWidget):
         """打开源表过滤条件对话框"""
         if self._current_group_idx < 0:
             return
-        # 直接从下拉框获取当前选择的源表（而不是从未保存的配置中获取）
+        # 直接从下拉框获取当前选择的源表
         src_table = self.combo_src.currentText()
         if not src_table:
             self._log("[Step4] 请先选择源表", "warning")
             return
-        condition = self.open_filter_modal(src_table)
+        # 使用前缀区分源表和目标表的条件（避免同名文件条件混淆）
+        filter_key = f"[源表]{src_table}"
+        condition = self.open_filter_modal(filter_key)
         # 更新显示
         if condition:
             self.lbl_src_filter.setText(condition)
@@ -555,11 +557,13 @@ class Step4Widget(BaseStepWidget):
         if combo:
             tgt_name = combo.currentText()
             if tgt_name:
-                condition = self.open_filter_modal(tgt_name)
+                # 使用前缀区分目标表的条件
+                filter_key = f"[目标表{row+1}]{tgt_name}"
+                condition = self.open_filter_modal(filter_key)
                 # 更新按钮文字
                 btn_filter = self.tgt_table.cellWidget(row, 2)
                 if btn_filter and isinstance(btn_filter, QPushButton):
-                    btn_filter.setText("已配置" if condition else "配置")
+                    btn_filter.setText("已设置" if condition else "设置")
                 # 保存到任务组配置
                 if self._current_group_idx >= 0:
                     targets = self._task_groups[self._current_group_idx].get("targets", [])

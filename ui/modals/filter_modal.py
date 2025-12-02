@@ -136,20 +136,35 @@ class FilterModal(QDialog):
     def set_target_name(self, name: str):
         """设置目标表名称并加载字段"""
         self._target_name = name
-        self.title_label.setText(f"目标表过滤条件 - {name}")
         
-        print(f"[FilterModal] set_target_name: {name}")
-        print(f"[FilterModal] _global_config 存在: {self._global_config is not None}")
+        # 从 key 中提取实际文件名（去掉 [源表] 或 [目标表N] 前缀）
+        actual_file_name = self._extract_file_name(name)
         
-        # 加载字段列表
-        self._load_fields(name)
+        # 显示友好的标题
+        if name.startswith("[源表]"):
+            self.title_label.setText(f"源表过滤条件 - {actual_file_name}")
+        else:
+            self.title_label.setText(f"目标表过滤条件 - {actual_file_name}")
         
-        # 恢复之前保存的条件
+        # 加载字段列表（使用实际文件名）
+        self._load_fields(actual_file_name)
+        
+        # 恢复之前保存的条件（使用完整 key）
         saved_conditions = self._conditions.get(name, [])
         self._load_conditions_to_table(saved_conditions)
         
         # 更新预览
         self._update_preview()
+    
+    def _extract_file_name(self, key: str) -> str:
+        """从 key 中提取实际文件名"""
+        # [源表]文件名.csv → 文件名.csv
+        # [目标表1]文件名.csv → 文件名.csv
+        import re
+        match = re.match(r'\[.*?\](.+)', key)
+        if match:
+            return match.group(1)
+        return key
     
     def _load_fields(self, file_name: str):
         """加载文件的字段列表"""

@@ -467,15 +467,15 @@ class Step4Widget(BaseStepWidget):
             op_layout.setContentsMargins(4, 4, 4, 4)
             op_layout.setSpacing(4)
             
-            btn_up = QPushButton("↑")
+            btn_up = QPushButton("上移")
             btn_up.setObjectName("step4_btn_tiny")
-            btn_up.setFixedSize(26, 26)
+            btn_up.setFixedSize(40, 26)
             btn_up.clicked.connect(lambda checked, row=r: self._move_target(row, -1))
             op_layout.addWidget(btn_up)
             
-            btn_down = QPushButton("↓")
+            btn_down = QPushButton("下移")
             btn_down.setObjectName("step4_btn_tiny")
-            btn_down.setFixedSize(26, 26)
+            btn_down.setFixedSize(40, 26)
             btn_down.clicked.connect(lambda checked, row=r: self._move_target(row, 1))
             op_layout.addWidget(btn_down)
             

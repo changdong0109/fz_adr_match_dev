@@ -239,13 +239,12 @@ class Step4Widget(BaseStepWidget):
         header.resizeSection(0, 35)  # 序
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 目标表
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 70)  # 过滤条件
+        header.resizeSection(2, 90)  # 过滤条件
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 70)  # 匹配字段
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(4, 140)  # 匹配方式说明
+        header.resizeSection(3, 80)  # 匹配字段
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # 匹配方式说明
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 130)  # 操作（上移+下移+删）
+        header.resizeSection(5, 80)  # 操作
         
         tgt_layout.addWidget(self.tgt_table)
         
@@ -428,64 +427,71 @@ class Step4Widget(BaseStepWidget):
         self.tgt_table.setRowCount(len(targets))
         
         for r, target in enumerate(targets):
-            # 序号
+            # 序号（居中）
             seq_item = QTableWidgetItem(str(r + 1))
             seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            seq_item.setFlags(seq_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.tgt_table.setItem(r, 0, seq_item)
             
             # 目标表（下拉框 - 不可编辑）
             combo = NoWheelComboBox()
-            combo.setEditable(False)  # 只能从列表选择
+            combo.setEditable(False)
             combo.addItems(self._available_files)
             tgt_table_name = target.get("table", "")
             if tgt_table_name and tgt_table_name in self._available_files:
                 combo.setCurrentText(tgt_table_name)
-            combo.setMinimumHeight(30)
             self.tgt_table.setCellWidget(r, 1, combo)
             
-            # 过滤条件按钮 - 显示状态
-            has_filter = bool(target.get("filter"))
-            btn_filter = QPushButton("已配置" if has_filter else "配置")
-            btn_filter.setObjectName("step4_btn_config_done" if has_filter else "step4_btn_config")
+            # 过滤条件 - 链接样式
+            filter_cond = target.get("filter", "")
+            filter_text = filter_cond[:15] + "..." if len(filter_cond) > 15 else (filter_cond or "点击配置")
+            btn_filter = QPushButton(filter_text)
+            btn_filter.setObjectName("step4_link_btn_done" if filter_cond else "step4_link_btn")
+            btn_filter.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_filter.setToolTip(filter_cond if filter_cond else "点击设置过滤条件")
             btn_filter.clicked.connect(lambda checked, row=r: self._open_target_filter(row))
             self.tgt_table.setCellWidget(r, 2, btn_filter)
             
-            # 匹配字段按钮 - 显示状态
+            # 匹配字段 - 链接样式
             match_fields = target.get("match_fields", "")
-            has_match = bool(match_fields)
-            btn_match = QPushButton(match_fields if has_match else "配置")
-            btn_match.setObjectName("step4_btn_config_done" if has_match else "step4_btn_config")
+            match_text = match_fields or "点击配置"
+            btn_match = QPushButton(match_text)
+            btn_match.setObjectName("step4_link_btn_done" if match_fields else "step4_link_btn")
+            btn_match.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_match.clicked.connect(lambda checked, row=r: self._open_target_match(row))
             self.tgt_table.setCellWidget(r, 3, btn_match)
             
-            # 匹配方式说明（只读）
+            # 匹配方式说明（只读，灰色文字）
             desc = target.get("match_desc", "")
             desc_item = QTableWidgetItem(desc)
-            desc_item.setForeground(QColor("#64748b"))
-            desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 不可编辑
+            desc_item.setForeground(QColor("#6b7280"))
+            desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.tgt_table.setItem(r, 4, desc_item)
             
-            # 操作按钮
+            # 操作按钮（紧凑布局）
             op_widget = QWidget()
             op_layout = QHBoxLayout(op_widget)
-            op_layout.setContentsMargins(4, 4, 4, 4)
-            op_layout.setSpacing(4)
+            op_layout.setContentsMargins(2, 2, 2, 2)
+            op_layout.setSpacing(2)
             
-            btn_up = QPushButton("上移")
-            btn_up.setObjectName("step4_btn_tiny")
-            btn_up.setFixedSize(40, 26)
+            btn_up = QPushButton("▲")
+            btn_up.setObjectName("step4_op_btn")
+            btn_up.setFixedSize(24, 24)
+            btn_up.setToolTip("上移")
             btn_up.clicked.connect(lambda checked, row=r: self._move_target(row, -1))
             op_layout.addWidget(btn_up)
             
-            btn_down = QPushButton("下移")
-            btn_down.setObjectName("step4_btn_tiny")
-            btn_down.setFixedSize(40, 26)
+            btn_down = QPushButton("▼")
+            btn_down.setObjectName("step4_op_btn")
+            btn_down.setFixedSize(24, 24)
+            btn_down.setToolTip("下移")
             btn_down.clicked.connect(lambda checked, row=r: self._move_target(row, 1))
             op_layout.addWidget(btn_down)
             
-            btn_del = QPushButton("删")
-            btn_del.setObjectName("step4_btn_tiny_del")
-            btn_del.setFixedSize(26, 26)
+            btn_del = QPushButton("×")
+            btn_del.setObjectName("step4_op_btn_del")
+            btn_del.setFixedSize(24, 24)
+            btn_del.setToolTip("删除")
             btn_del.clicked.connect(lambda checked, row=r: self._delete_target(row))
             op_layout.addWidget(btn_del)
             

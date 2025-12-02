@@ -1326,6 +1326,62 @@ QPushButton#step4_btn_config_done:hover {
     border-color: #6ee7b7;
 }
 
+/* 链接样式按钮 - 未配置 */
+QPushButton#step4_link_btn {
+    font-size: 12px;
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    text-decoration: underline;
+    padding: 4px 8px;
+}
+
+QPushButton#step4_link_btn:hover {
+    color: #0284c7;
+}
+
+/* 链接样式按钮 - 已配置 */
+QPushButton#step4_link_btn_done {
+    font-size: 12px;
+    color: #059669;
+    background: transparent;
+    border: none;
+    padding: 4px 8px;
+}
+
+QPushButton#step4_link_btn_done:hover {
+    color: #047857;
+    text-decoration: underline;
+}
+
+/* 操作按钮 */
+QPushButton#step4_op_btn {
+    font-size: 11px;
+    color: #64748b;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 3px;
+}
+
+QPushButton#step4_op_btn:hover {
+    background-color: #e2e8f0;
+    color: #334155;
+}
+
+QPushButton#step4_op_btn_del {
+    font-size: 12px;
+    font-weight: bold;
+    color: #ef4444;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 3px;
+}
+
+QPushButton#step4_op_btn_del:hover {
+    background-color: #fee2e2;
+    color: #dc2626;
+}
+
 QTableWidget#step4_target_table {
     border: 1px solid #e2e8f0;
     border-radius: 4px;

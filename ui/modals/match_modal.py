@@ -86,11 +86,16 @@ class MatchModal(QDialog):
         self.pair_table.setAlternatingRowColors(True)
         
         header = self.pair_table.horizontalHeader()
-        header.setMinimumSectionSize(60)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setStretchLastSection(False)
+        # 源表字段 - 固定宽度
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 120)
+        # 匹配方式 - 固定宽度
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 100)
+        header.resizeSection(1, 80)
+        # 目标表字段 - 拉伸填充
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        # 操作 - 固定宽度
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(3, 50)
         
@@ -331,6 +336,7 @@ class MatchModal(QDialog):
         # 匹配方式下拉框
         combo_match = NoWheelComboBox()
         combo_match.setEditable(False)
+        combo_match.setFixedWidth(75)
         combo_match.addItems(["=", "LIKE", "包含", "被包含", "前缀", "后缀"])
         combo_match.setCurrentText(match_type)
         combo_match.setToolTip("= 精确匹配\nLIKE 模糊匹配\n包含 源包含目标\n被包含 目标包含源\n前缀 源以目标开头\n后缀 源以目标结尾")

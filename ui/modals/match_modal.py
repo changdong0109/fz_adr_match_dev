@@ -21,7 +21,8 @@ class MatchModal(QDialog):
         self.setWindowTitle("关联字段配置")
         self.setObjectName("match_modal")
         self.setModal(True)
-        self.resize(650, 450)
+        self.resize(900, 550)
+        self.setMinimumSize(800, 450)
         
         self._global_config = global_config
         self._target_key = ""
@@ -60,35 +61,38 @@ class MatchModal(QDialog):
         # 左：源表字段
         left_box = QGroupBox("源表字段（双击添加）")
         left_box.setObjectName("match_modal_group")
+        left_box.setMinimumWidth(180)
         left_layout = QVBoxLayout(left_box)
-        left_layout.setContentsMargins(6, 10, 6, 6)
+        left_layout.setContentsMargins(8, 12, 8, 8)
         self.source_list = QListWidget()
         self.source_list.setObjectName("match_modal_field_list")
         self.source_list.itemDoubleClicked.connect(self._on_source_double_click)
         left_layout.addWidget(self.source_list)
-        main_layout.addWidget(left_box)
+        main_layout.addWidget(left_box, 1)
         
         # 中：已选关联对
         center_box = QGroupBox("已选关联（值相等则匹配）")
         center_box.setObjectName("match_modal_group")
+        center_box.setMinimumWidth(320)
         center_layout = QVBoxLayout(center_box)
-        center_layout.setContentsMargins(6, 10, 6, 6)
+        center_layout.setContentsMargins(8, 12, 8, 8)
         center_layout.setSpacing(8)
         
         self.pair_table = QTableWidget(0, 4)
         self.pair_table.setObjectName("match_modal_table")
-        self.pair_table.setHorizontalHeaderLabels(["源表字段", "匹配方式", "目标表字段", ""])
+        self.pair_table.setHorizontalHeaderLabels(["源表字段", "匹配方式", "目标表字段", "操作"])
         self.pair_table.verticalHeader().setVisible(False)
-        self.pair_table.verticalHeader().setDefaultSectionSize(36)
+        self.pair_table.verticalHeader().setDefaultSectionSize(38)
         self.pair_table.setAlternatingRowColors(True)
         
         header = self.pair_table.horizontalHeader()
+        header.setMinimumSectionSize(60)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 90)
+        header.resizeSection(1, 100)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 40)
+        header.resizeSection(3, 50)
         
         center_layout.addWidget(self.pair_table)
         
@@ -98,18 +102,19 @@ class MatchModal(QDialog):
         btn_add.clicked.connect(self._add_pair)
         center_layout.addWidget(btn_add)
         
-        main_layout.addWidget(center_box)
+        main_layout.addWidget(center_box, 2)
         
         # 右：目标表字段
         right_box = QGroupBox("目标表字段（双击添加）")
         right_box.setObjectName("match_modal_group")
+        right_box.setMinimumWidth(180)
         right_layout = QVBoxLayout(right_box)
-        right_layout.setContentsMargins(6, 10, 6, 6)
+        right_layout.setContentsMargins(8, 12, 8, 8)
         self.target_list = QListWidget()
         self.target_list.setObjectName("match_modal_field_list")
         self.target_list.itemDoubleClicked.connect(self._on_target_double_click)
         right_layout.addWidget(self.target_list)
-        main_layout.addWidget(right_box)
+        main_layout.addWidget(right_box, 1)
         
         layout.addLayout(main_layout, 1)
         

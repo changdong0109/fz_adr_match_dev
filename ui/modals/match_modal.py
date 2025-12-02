@@ -58,12 +58,13 @@ class MatchModal(QDialog):
         main_layout = QHBoxLayout()
         
         # 左：源表字段
-        left_box = QGroupBox("源表字段")
+        left_box = QGroupBox("源表字段（双击添加）")
         left_box.setObjectName("match_modal_group")
         left_layout = QVBoxLayout(left_box)
         left_layout.setContentsMargins(6, 10, 6, 6)
         self.source_list = QListWidget()
         self.source_list.setObjectName("match_modal_field_list")
+        self.source_list.itemDoubleClicked.connect(self._on_source_double_click)
         left_layout.addWidget(self.source_list)
         main_layout.addWidget(left_box)
         
@@ -100,12 +101,13 @@ class MatchModal(QDialog):
         main_layout.addWidget(center_box)
         
         # 右：目标表字段
-        right_box = QGroupBox("目标表字段")
+        right_box = QGroupBox("目标表字段（双击添加）")
         right_box.setObjectName("match_modal_group")
         right_layout = QVBoxLayout(right_box)
         right_layout.setContentsMargins(6, 10, 6, 6)
         self.target_list = QListWidget()
         self.target_list.setObjectName("match_modal_field_list")
+        self.target_list.itemDoubleClicked.connect(self._on_target_double_click)
         right_layout.addWidget(self.target_list)
         main_layout.addWidget(right_box)
         
@@ -243,6 +245,30 @@ class MatchModal(QDialog):
             return
         
         self._add_pair_to_table(src, tgt)
+    
+    def _on_source_double_click(self, item: QListWidgetItem):
+        """双击源表字段 - 如果右边已选中则直接添加"""
+        if item.text().startswith("("):
+            return
+        
+        tgt_item = self.target_list.currentItem()
+        if tgt_item and not tgt_item.text().startswith("("):
+            src = item.text()
+            tgt = tgt_item.text()
+            if not self._pair_exists(src, tgt):
+                self._add_pair_to_table(src, tgt)
+    
+    def _on_target_double_click(self, item: QListWidgetItem):
+        """双击目标表字段 - 如果左边已选中则直接添加"""
+        if item.text().startswith("("):
+            return
+        
+        src_item = self.source_list.currentItem()
+        if src_item and not src_item.text().startswith("("):
+            src = src_item.text()
+            tgt = item.text()
+            if not self._pair_exists(src, tgt):
+                self._add_pair_to_table(src, tgt)
     
     def _pair_exists(self, src: str, tgt: str) -> bool:
         """检查字段对是否已存在"""

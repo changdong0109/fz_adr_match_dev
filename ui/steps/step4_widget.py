@@ -573,7 +573,14 @@ class Step4Widget(BaseStepWidget):
         if not src_table:
             self._log("[Step4] 请先选择源表", "warning")
             return
-        self.open_filter_modal(src_table)
+        condition = self.open_filter_modal(src_table)
+        # 更新显示
+        if condition:
+            self.lbl_src_filter.setText(condition)
+            # 保存到任务组配置
+            self._task_groups[self._current_group_idx]["source_filter"] = condition
+        else:
+            self.lbl_src_filter.setText("无")
     
     def _open_target_filter(self, row: int):
         """打开目标表过滤条件对话框"""
@@ -582,7 +589,16 @@ class Step4Widget(BaseStepWidget):
         if combo:
             tgt_name = combo.currentText()
             if tgt_name:
-                self.open_filter_modal(tgt_name)
+                condition = self.open_filter_modal(tgt_name)
+                # 更新按钮文字
+                btn_filter = self.tgt_table.cellWidget(row, 2)
+                if btn_filter and isinstance(btn_filter, QPushButton):
+                    btn_filter.setText("已配置" if condition else "配置")
+                # 保存到任务组配置
+                if self._current_group_idx >= 0:
+                    targets = self._task_groups[self._current_group_idx].get("targets", [])
+                    if 0 <= row < len(targets):
+                        targets[row]["filter"] = condition or ""
             else:
                 self._log("[Step4] 请先选择目标表", "warning")
     

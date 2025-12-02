@@ -380,14 +380,19 @@ class MatchDialog(QDialog):
             scrollbar = self.log_panel.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
     
-    def _open_filter_modal(self, target_name: str):
-        """打开过滤条件模态对话框"""
+    def _open_filter_modal(self, target_name: str) -> str:
+        """打开过滤条件模态对话框，返回设置的条件"""
         if self.filter_modal is not None:
             try:
                 self.filter_modal.set_target_name(target_name)
-                self.filter_modal.exec()
+                result = self.filter_modal.exec()
+                # 如果用户点击确定，返回条件
+                if result == QDialog.DialogCode.Accepted:
+                    condition = self.filter_modal.get_condition()
+                    return condition
             except Exception as e:
                 self._log(f"[错误] 打开过滤条件对话框失败：{e}", "error")
+        return ""
     
     def _open_match_modal(self, target_name: str):
         """打开字段匹配对模态对话框"""

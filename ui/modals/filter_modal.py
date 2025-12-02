@@ -1,58 +1,156 @@
 """
-过滤条件模态对话框
+过滤条件模态对话框 - 支持字段选择
 """
+import os
+import pandas as pd
+from typing import List, Dict, Optional
 from qgis.PyQt.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QPushButton
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QPushButton,
+    QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox, QSplitter,
+    QListWidget, QListWidgetItem, QAbstractItemView
 )
 from qgis.PyQt.QtCore import Qt
+from ..widgets.no_wheel_combo_box import NoWheelComboBox
 
 
 class FilterModal(QDialog):
-    """目标表过滤条件对话框"""
+    """目标表过滤条件对话框 - 支持字段选择"""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, global_config=None):
         super().__init__(parent)
         self.setWindowTitle("目标表过滤条件")
         self.setModal(True)
-        self.resize(500, 280)
+        self.resize(700, 500)
         self._target_name = ""
         self._conditions = {}  # 存储每个目标表的条件
+        self._global_config = global_config
+        self._fields: List[str] = []  # 当前表的字段列表
         self._build_ui()
+    
+    def set_global_config(self, config):
+        """设置全局配置"""
+        self._global_config = config
     
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
         
+        # 标题
         self.title_label = QLabel("目标表过滤条件 -")
-        self.title_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        self.title_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #1e293b;")
         layout.addWidget(self.title_label)
         
-        subtitle = QLabel("输入SQL WHERE条件（不含WHERE关键字）：")
-        subtitle.setStyleSheet("font-size: 12px; color: #374151;")
-        layout.addWidget(subtitle)
+        # 使用 QSplitter 分左右两栏
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        example = QLabel("例如: type = '住宅' AND valid = 1")
-        example.setStyleSheet("font-size: 11px; color: #9ca3af;")
-        layout.addWidget(example)
+        # ===== 左侧：字段列表 =====
+        left_panel = QGroupBox("可用字段")
+        left_panel.setStyleSheet("QGroupBox { font-weight: 600; }")
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(8, 12, 8, 8)
         
-        # 条件文本框
-        self.txt_condition = QTextEdit()
-        self.txt_condition.setPlaceholderText("输入过滤条件...")
-        self.txt_condition.setStyleSheet("""
+        self.field_list = QListWidget()
+        self.field_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.field_list.itemDoubleClicked.connect(self._on_field_double_clicked)
+        self.field_list.setStyleSheet("""
+            QListWidget {
+                font-size: 12px;
+                border: 1px solid #e2e8f0;
+                border-radius: 4px;
+            }
+            QListWidget::item {
+                padding: 6px 8px;
+            }
+            QListWidget::item:selected {
+                background-color: #e0f2fe;
+                color: #0369a1;
+            }
+        """)
+        left_layout.addWidget(self.field_list)
+        
+        hint = QLabel("双击字段添加到条件")
+        hint.setStyleSheet("font-size: 11px; color: #64748b;")
+        left_layout.addWidget(hint)
+        
+        left_panel.setMinimumWidth(180)
+        left_panel.setMaximumWidth(220)
+        splitter.addWidget(left_panel)
+        
+        # ===== 右侧：条件构建 =====
+        right_panel = QGroupBox("过滤条件")
+        right_panel.setStyleSheet("QGroupBox { font-weight: 600; }")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(8, 12, 8, 8)
+        right_layout.setSpacing(10)
+        
+        # 条件构建表格
+        self.cond_table = QTableWidget(0, 5)
+        self.cond_table.setHorizontalHeaderLabels(["字段", "运算符", "值", "逻辑", "操作"])
+        self.cond_table.verticalHeader().setVisible(False)
+        self.cond_table.verticalHeader().setDefaultSectionSize(36)
+        self.cond_table.setMinimumHeight(150)
+        self.cond_table.setAlternatingRowColors(True)
+        self.cond_table.setStyleSheet("""
+            QTableWidget {
+                font-size: 12px;
+                border: 1px solid #e2e8f0;
+                border-radius: 4px;
+            }
+        """)
+        
+        header = self.cond_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(1, 80)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(3, 60)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(4, 50)
+        
+        right_layout.addWidget(self.cond_table)
+        
+        # 添加条件按钮
+        btn_add_row = QPushButton("+ 添加条件")
+        btn_add_row.setStyleSheet("""
+            QPushButton {
+                font-size: 12px;
+                padding: 6px 14px;
+                background-color: #0284c7;
+                color: white;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #0369a1;
+            }
+        """)
+        btn_add_row.clicked.connect(lambda: self._add_condition_row())
+        right_layout.addWidget(btn_add_row)
+        
+        # 生成的SQL预览
+        right_layout.addWidget(QLabel("生成的条件预览:"))
+        self.txt_preview = QTextEdit()
+        self.txt_preview.setReadOnly(True)
+        self.txt_preview.setMaximumHeight(60)
+        self.txt_preview.setStyleSheet("""
             QTextEdit {
                 font-size: 12px;
                 font-family: Consolas, monospace;
-                padding: 8px;
-                border: 1px solid #d1d5db;
+                padding: 6px;
+                border: 1px solid #e2e8f0;
                 border-radius: 4px;
-                background-color: #ffffff;
+                background-color: #f8fafc;
+                color: #334155;
             }
         """)
-        self.txt_condition.setMinimumHeight(100)
-        layout.addWidget(self.txt_condition)
+        right_layout.addWidget(self.txt_preview)
         
-        layout.addStretch()
+        splitter.addWidget(right_panel)
+        splitter.setSizes([200, 480])
+        
+        layout.addWidget(splitter, 1)
         
         # 按钮行
         btn_row = QHBoxLayout()
@@ -62,14 +160,14 @@ class FilterModal(QDialog):
         btn_ok.setStyleSheet("""
             QPushButton {
                 font-size: 12px;
-                padding: 6px 16px;
-                background-color: #3b82f6;
+                padding: 8px 20px;
+                background-color: #0284c7;
                 color: white;
                 border: none;
                 border-radius: 4px;
             }
             QPushButton:hover {
-                background-color: #2563eb;
+                background-color: #0369a1;
             }
         """)
         btn_ok.clicked.connect(self._on_ok)
@@ -79,14 +177,14 @@ class FilterModal(QDialog):
         btn_cancel.setStyleSheet("""
             QPushButton {
                 font-size: 12px;
-                padding: 6px 16px;
-                background-color: #f3f4f6;
-                color: #374151;
-                border: 1px solid #d1d5db;
+                padding: 8px 20px;
+                background-color: #f1f5f9;
+                color: #475569;
+                border: 1px solid #cbd5e1;
                 border-radius: 4px;
             }
             QPushButton:hover {
-                background-color: #e5e7eb;
+                background-color: #e2e8f0;
             }
         """)
         btn_cancel.clicked.connect(self.close)
@@ -95,23 +193,254 @@ class FilterModal(QDialog):
         layout.addLayout(btn_row)
     
     def set_target_name(self, name: str):
-        """设置目标表名称"""
+        """设置目标表名称并加载字段"""
         self._target_name = name
         self.title_label.setText(f"目标表过滤条件 - {name}")
+        
+        # 加载字段列表
+        self._load_fields(name)
+        
         # 恢复之前保存的条件
-        self.txt_condition.setPlainText(self._conditions.get(name, ""))
+        saved_conditions = self._conditions.get(name, [])
+        self._load_conditions_to_table(saved_conditions)
+        
+        # 更新预览
+        self._update_preview()
+    
+    def _load_fields(self, file_name: str):
+        """加载文件的字段列表"""
+        self._fields = []
+        self.field_list.clear()
+        
+        # 尝试从全局配置获取文件路径
+        file_path = self._find_file_path(file_name)
+        
+        if file_path and os.path.exists(file_path):
+            try:
+                # 读取文件头获取字段
+                if file_path.lower().endswith('.csv'):
+                    df = pd.read_csv(file_path, nrows=0, encoding='utf-8')
+                elif file_path.lower().endswith(('.xlsx', '.xls')):
+                    df = pd.read_excel(file_path, nrows=0)
+                else:
+                    df = None
+                
+                if df is not None:
+                    self._fields = list(df.columns)
+            except Exception as e:
+                print(f"加载字段失败: {e}")
+        
+        # 填充字段列表
+        for field in self._fields:
+            item = QListWidgetItem(field)
+            self.field_list.addItem(item)
+        
+        # 如果没有字段，显示提示
+        if not self._fields:
+            item = QListWidgetItem("(无法加载字段)")
+            item.setForeground(Qt.GlobalColor.gray)
+            self.field_list.addItem(item)
+    
+    def _find_file_path(self, file_name: str) -> Optional[str]:
+        """查找文件的完整路径"""
+        if not self._global_config:
+            # 尝试从父窗口获取
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'global_config'):
+                    self._global_config = parent.global_config
+                    break
+                parent = parent.parent()
+        
+        if not self._global_config:
+            return None
+        
+        region_info = self._global_config.get_region_info()
+        customer_folder = region_info.get('customer_folder', '')
+        shp_folder = region_info.get('shp_folder', '')
+        
+        # 在客户数据文件夹查找
+        if customer_folder:
+            path = os.path.join(customer_folder, file_name)
+            if os.path.exists(path):
+                return path
+        
+        # 在SHP数据文件夹查找
+        if shp_folder:
+            path = os.path.join(shp_folder, file_name)
+            if os.path.exists(path):
+                return path
+        
+        return None
+    
+    def _on_field_double_clicked(self, item: QListWidgetItem):
+        """双击字段添加到条件"""
+        field = item.text()
+        if field and not field.startswith("("):
+            self._add_condition_row(field)
+    
+    def _add_condition_row(self, field: str = ""):
+        """添加条件行"""
+        row = self.cond_table.rowCount()
+        self.cond_table.insertRow(row)
+        
+        # 字段下拉框
+        combo_field = NoWheelComboBox()
+        combo_field.setEditable(True)
+        combo_field.addItems(self._fields)
+        if field:
+            combo_field.setCurrentText(field)
+        combo_field.currentTextChanged.connect(self._update_preview)
+        self.cond_table.setCellWidget(row, 0, combo_field)
+        
+        # 运算符下拉框
+        combo_op = NoWheelComboBox()
+        combo_op.addItems(["=", "!=", ">", "<", ">=", "<=", "LIKE", "IN", "IS NULL", "IS NOT NULL"])
+        combo_op.currentTextChanged.connect(self._update_preview)
+        self.cond_table.setCellWidget(row, 1, combo_op)
+        
+        # 值输入
+        from qgis.PyQt.QtWidgets import QLineEdit
+        txt_value = QLineEdit()
+        txt_value.setPlaceholderText("输入值...")
+        txt_value.textChanged.connect(self._update_preview)
+        self.cond_table.setCellWidget(row, 2, txt_value)
+        
+        # 逻辑运算符
+        combo_logic = NoWheelComboBox()
+        combo_logic.addItems(["AND", "OR"])
+        combo_logic.currentTextChanged.connect(self._update_preview)
+        self.cond_table.setCellWidget(row, 3, combo_logic)
+        
+        # 删除按钮
+        btn_del = QPushButton("删")
+        btn_del.setStyleSheet("""
+            QPushButton {
+                font-size: 11px;
+                padding: 2px 6px;
+                background-color: #fef2f2;
+                color: #dc2626;
+                border: 1px solid #fecaca;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #fee2e2;
+            }
+        """)
+        btn_del.clicked.connect(lambda checked, r=row: self._delete_row(r))
+        self.cond_table.setCellWidget(row, 4, btn_del)
+        
+        self._update_preview()
+    
+    def _delete_row(self, row: int):
+        """删除条件行"""
+        # 查找实际行号
+        sender = self.sender()
+        if sender:
+            for r in range(self.cond_table.rowCount()):
+                widget = self.cond_table.cellWidget(r, 4)
+                if widget is sender:
+                    row = r
+                    break
+        
+        self.cond_table.removeRow(row)
+        self._update_preview()
+    
+    def _update_preview(self):
+        """更新条件预览"""
+        conditions = []
+        for row in range(self.cond_table.rowCount()):
+            field_combo = self.cond_table.cellWidget(row, 0)
+            op_combo = self.cond_table.cellWidget(row, 1)
+            value_edit = self.cond_table.cellWidget(row, 2)
+            logic_combo = self.cond_table.cellWidget(row, 3)
+            
+            if field_combo and op_combo:
+                field = field_combo.currentText()
+                op = op_combo.currentText()
+                value = value_edit.text() if value_edit else ""
+                logic = logic_combo.currentText() if logic_combo else "AND"
+                
+                if field:
+                    if op in ("IS NULL", "IS NOT NULL"):
+                        cond = f"{field} {op}"
+                    elif op == "LIKE":
+                        cond = f"{field} LIKE '%{value}%'"
+                    elif op == "IN":
+                        cond = f"{field} IN ({value})"
+                    else:
+                        # 判断是否需要加引号
+                        if value.isdigit():
+                            cond = f"{field} {op} {value}"
+                        else:
+                            cond = f"{field} {op} '{value}'"
+                    
+                    conditions.append((cond, logic))
+        
+        # 组装SQL
+        if conditions:
+            sql_parts = []
+            for i, (cond, logic) in enumerate(conditions):
+                if i == 0:
+                    sql_parts.append(cond)
+                else:
+                    sql_parts.append(f"{logic} {cond}")
+            sql = " ".join(sql_parts)
+        else:
+            sql = ""
+        
+        self.txt_preview.setPlainText(sql)
+    
+    def _load_conditions_to_table(self, conditions: List[Dict]):
+        """加载保存的条件到表格"""
+        self.cond_table.setRowCount(0)
+        for cond in conditions:
+            self._add_condition_row(cond.get("field", ""))
+            row = self.cond_table.rowCount() - 1
+            
+            op_combo = self.cond_table.cellWidget(row, 1)
+            if op_combo:
+                op_combo.setCurrentText(cond.get("op", "="))
+            
+            value_edit = self.cond_table.cellWidget(row, 2)
+            if value_edit:
+                value_edit.setText(cond.get("value", ""))
+            
+            logic_combo = self.cond_table.cellWidget(row, 3)
+            if logic_combo:
+                logic_combo.setCurrentText(cond.get("logic", "AND"))
     
     def get_condition(self) -> str:
-        """获取当前条件"""
-        return self.txt_condition.toPlainText().strip()
+        """获取当前条件SQL"""
+        return self.txt_preview.toPlainText().strip()
     
     def get_condition_for(self, target_name: str) -> str:
         """获取指定目标表的条件"""
-        return self._conditions.get(target_name, "")
+        conditions = self._conditions.get(target_name, [])
+        # 简单拼接
+        if not conditions:
+            return ""
+        return self.txt_preview.toPlainText().strip()
     
     def _on_ok(self):
         """确定按钮"""
-        # 保存条件
+        # 保存条件（结构化数据）
         if self._target_name:
-            self._conditions[self._target_name] = self.txt_condition.toPlainText().strip()
+            conditions = []
+            for row in range(self.cond_table.rowCount()):
+                field_combo = self.cond_table.cellWidget(row, 0)
+                op_combo = self.cond_table.cellWidget(row, 1)
+                value_edit = self.cond_table.cellWidget(row, 2)
+                logic_combo = self.cond_table.cellWidget(row, 3)
+                
+                if field_combo:
+                    conditions.append({
+                        "field": field_combo.currentText(),
+                        "op": op_combo.currentText() if op_combo else "=",
+                        "value": value_edit.text() if value_edit else "",
+                        "logic": logic_combo.currentText() if logic_combo else "AND"
+                    })
+            
+            self._conditions[self._target_name] = conditions
+        
         self.accept()

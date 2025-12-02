@@ -48,6 +48,10 @@ class MatchDialog(QDialog):
 
         self._build_ui()
         self._apply_styles()
+        
+        # 设置模态对话框的全局配置
+        if self.global_config:
+            self.filter_modal.set_global_config(self.global_config)
 
         # 初始化状态：默认显示Step1
         self._current_step = 1

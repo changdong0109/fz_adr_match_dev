@@ -55,9 +55,6 @@ class MatchModal(QDialog):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(3, 50)
         
-        # 示例行
-        self.add_row("std_full_addr", "模糊", "mp_full_addr")
-        self.add_row("std_city", "精确", "city")
         layout.addWidget(self.table)
         
         btn_add = QPushButton("+ 新增字段对")

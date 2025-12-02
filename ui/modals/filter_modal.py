@@ -312,6 +312,7 @@ class FilterModal(QDialog):
         btn_del.clicked.connect(lambda checked, r=row: self._delete_row(r))
         self.cond_table.setCellWidget(row, 4, btn_del)
         
+        self._update_logic_visibility()
         self._update_preview()
     
     def _delete_row(self, row: int):
@@ -326,7 +327,20 @@ class FilterModal(QDialog):
                     break
         
         self.cond_table.removeRow(row)
+        self._update_logic_visibility()
         self._update_preview()
+    
+    def _update_logic_visibility(self):
+        """更新逻辑列的可见性：最后一行隐藏逻辑下拉框"""
+        row_count = self.cond_table.rowCount()
+        for row in range(row_count):
+            logic_combo = self.cond_table.cellWidget(row, 3)
+            if logic_combo:
+                # 最后一行隐藏逻辑运算符（因为后面没有条件了）
+                if row == row_count - 1:
+                    logic_combo.setVisible(False)
+                else:
+                    logic_combo.setVisible(True)
     
     def _update_preview(self):
         """更新条件预览"""

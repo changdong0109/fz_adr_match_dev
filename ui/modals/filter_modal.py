@@ -1,5 +1,6 @@
 """
 过滤条件模态对话框 - 支持字段选择
+遵循文档规范：样式通过 objectName + QSS 管理
 """
 import os
 import pandas as pd
@@ -7,7 +8,7 @@ from typing import List, Dict, Optional
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox, QSplitter,
-    QListWidget, QListWidgetItem, QAbstractItemView
+    QListWidget, QListWidgetItem, QAbstractItemView, QLineEdit
 )
 from qgis.PyQt.QtCore import Qt
 from ..widgets.no_wheel_combo_box import NoWheelComboBox
@@ -19,6 +20,7 @@ class FilterModal(QDialog):
     def __init__(self, parent=None, global_config=None):
         super().__init__(parent)
         self.setWindowTitle("目标表过滤条件")
+        self.setObjectName("filter_modal")
         self.setModal(True)
         self.resize(700, 500)
         self._target_name = ""
@@ -38,39 +40,27 @@ class FilterModal(QDialog):
         
         # 标题
         self.title_label = QLabel("目标表过滤条件 -")
-        self.title_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #1e293b;")
+        self.title_label.setObjectName("filter_modal_title")
         layout.addWidget(self.title_label)
         
         # 使用 QSplitter 分左右两栏
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("filter_modal_splitter")
         
         # ===== 左侧：字段列表 =====
         left_panel = QGroupBox("可用字段")
-        left_panel.setStyleSheet("QGroupBox { font-weight: 600; }")
+        left_panel.setObjectName("filter_modal_group")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 12, 8, 8)
         
         self.field_list = QListWidget()
+        self.field_list.setObjectName("filter_modal_field_list")
         self.field_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.field_list.itemDoubleClicked.connect(self._on_field_double_clicked)
-        self.field_list.setStyleSheet("""
-            QListWidget {
-                font-size: 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 4px;
-            }
-            QListWidget::item {
-                padding: 6px 8px;
-            }
-            QListWidget::item:selected {
-                background-color: #e0f2fe;
-                color: #0369a1;
-            }
-        """)
         left_layout.addWidget(self.field_list)
         
         hint = QLabel("双击字段添加到条件")
-        hint.setStyleSheet("font-size: 11px; color: #64748b;")
+        hint.setObjectName("filter_modal_hint")
         left_layout.addWidget(hint)
         
         left_panel.setMinimumWidth(180)
@@ -79,25 +69,19 @@ class FilterModal(QDialog):
         
         # ===== 右侧：条件构建 =====
         right_panel = QGroupBox("过滤条件")
-        right_panel.setStyleSheet("QGroupBox { font-weight: 600; }")
+        right_panel.setObjectName("filter_modal_group")
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(8, 12, 8, 8)
         right_layout.setSpacing(10)
         
         # 条件构建表格
         self.cond_table = QTableWidget(0, 5)
+        self.cond_table.setObjectName("filter_modal_cond_table")
         self.cond_table.setHorizontalHeaderLabels(["字段", "运算符", "值", "逻辑", "操作"])
         self.cond_table.verticalHeader().setVisible(False)
         self.cond_table.verticalHeader().setDefaultSectionSize(36)
         self.cond_table.setMinimumHeight(150)
         self.cond_table.setAlternatingRowColors(True)
-        self.cond_table.setStyleSheet("""
-            QTableWidget {
-                font-size: 12px;
-                border: 1px solid #e2e8f0;
-                border-radius: 4px;
-            }
-        """)
         
         header = self.cond_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -113,38 +97,19 @@ class FilterModal(QDialog):
         
         # 添加条件按钮
         btn_add_row = QPushButton("+ 添加条件")
-        btn_add_row.setStyleSheet("""
-            QPushButton {
-                font-size: 12px;
-                padding: 6px 14px;
-                background-color: #0284c7;
-                color: white;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #0369a1;
-            }
-        """)
+        btn_add_row.setObjectName("filter_modal_btn_add")
         btn_add_row.clicked.connect(lambda: self._add_condition_row())
         right_layout.addWidget(btn_add_row)
         
         # 生成的SQL预览
-        right_layout.addWidget(QLabel("生成的条件预览:"))
+        lbl_preview = QLabel("生成的条件预览:")
+        lbl_preview.setObjectName("filter_modal_label")
+        right_layout.addWidget(lbl_preview)
+        
         self.txt_preview = QTextEdit()
+        self.txt_preview.setObjectName("filter_modal_preview")
         self.txt_preview.setReadOnly(True)
         self.txt_preview.setMaximumHeight(60)
-        self.txt_preview.setStyleSheet("""
-            QTextEdit {
-                font-size: 12px;
-                font-family: Consolas, monospace;
-                padding: 6px;
-                border: 1px solid #e2e8f0;
-                border-radius: 4px;
-                background-color: #f8fafc;
-                color: #334155;
-            }
-        """)
         right_layout.addWidget(self.txt_preview)
         
         splitter.addWidget(right_panel)
@@ -157,36 +122,12 @@ class FilterModal(QDialog):
         btn_row.addStretch()
         
         btn_ok = QPushButton("确定")
-        btn_ok.setStyleSheet("""
-            QPushButton {
-                font-size: 12px;
-                padding: 8px 20px;
-                background-color: #0284c7;
-                color: white;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #0369a1;
-            }
-        """)
+        btn_ok.setObjectName("filter_modal_btn_ok")
         btn_ok.clicked.connect(self._on_ok)
         btn_row.addWidget(btn_ok)
         
         btn_cancel = QPushButton("取消")
-        btn_cancel.setStyleSheet("""
-            QPushButton {
-                font-size: 12px;
-                padding: 8px 20px;
-                background-color: #f1f5f9;
-                color: #475569;
-                border: 1px solid #cbd5e1;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #e2e8f0;
-            }
-        """)
+        btn_cancel.setObjectName("filter_modal_btn_cancel")
         btn_cancel.clicked.connect(self.close)
         btn_row.addWidget(btn_cancel)
         
@@ -300,7 +241,6 @@ class FilterModal(QDialog):
         self.cond_table.setCellWidget(row, 1, combo_op)
         
         # 值输入
-        from qgis.PyQt.QtWidgets import QLineEdit
         txt_value = QLineEdit()
         txt_value.setPlaceholderText("输入值...")
         txt_value.textChanged.connect(self._update_preview)
@@ -314,19 +254,7 @@ class FilterModal(QDialog):
         
         # 删除按钮
         btn_del = QPushButton("删")
-        btn_del.setStyleSheet("""
-            QPushButton {
-                font-size: 11px;
-                padding: 2px 6px;
-                background-color: #fef2f2;
-                color: #dc2626;
-                border: 1px solid #fecaca;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #fee2e2;
-            }
-        """)
+        btn_del.setObjectName("filter_modal_btn_del")
         btn_del.clicked.connect(lambda checked, r=row: self._delete_row(r))
         self.cond_table.setCellWidget(row, 4, btn_del)
         
@@ -417,7 +345,6 @@ class FilterModal(QDialog):
     def get_condition_for(self, target_name: str) -> str:
         """获取指定目标表的条件"""
         conditions = self._conditions.get(target_name, [])
-        # 简单拼接
         if not conditions:
             return ""
         return self.txt_preview.toPlainText().strip()

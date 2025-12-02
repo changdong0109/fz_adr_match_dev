@@ -1621,3 +1621,222 @@ QTableWidget#step5_history_table::item {
     padding: 6px 8px;
 }
 
+/* ========== FilterModal 过滤条件对话框样式 ========== */
+
+QDialog#filter_modal {
+    background-color: #ffffff;
+}
+
+QLabel#filter_modal_title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    padding-bottom: 4px;
+}
+
+QGroupBox#filter_modal_group {
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+}
+
+QGroupBox#filter_modal_group::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 4px;
+    background-color: #ffffff;
+}
+
+QListWidget#filter_modal_field_list {
+    font-size: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    outline: none;
+}
+
+QListWidget#filter_modal_field_list::item {
+    padding: 6px 8px;
+}
+
+QListWidget#filter_modal_field_list::item:selected {
+    background-color: #e0f2fe;
+    color: #0369a1;
+}
+
+QListWidget#filter_modal_field_list::item:hover:!selected {
+    background-color: #f1f5f9;
+}
+
+QLabel#filter_modal_hint {
+    font-size: 11px;
+    color: #64748b;
+    padding-top: 4px;
+}
+
+QLabel#filter_modal_label {
+    font-size: 12px;
+    color: #475569;
+}
+
+QTableWidget#filter_modal_cond_table {
+    font-size: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    gridline-color: #f1f5f9;
+}
+
+QTableWidget#filter_modal_cond_table::item {
+    padding: 4px 6px;
+}
+
+QTextEdit#filter_modal_preview {
+    font-size: 12px;
+    font-family: Consolas, monospace;
+    padding: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background-color: #f8fafc;
+    color: #334155;
+}
+
+QPushButton#filter_modal_btn_add {
+    font-size: 12px;
+    padding: 6px 14px;
+    background-color: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#filter_modal_btn_add:hover {
+    background-color: #0369a1;
+}
+
+QPushButton#filter_modal_btn_ok {
+    font-size: 12px;
+    padding: 8px 20px;
+    background-color: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#filter_modal_btn_ok:hover {
+    background-color: #0369a1;
+}
+
+QPushButton#filter_modal_btn_cancel {
+    font-size: 12px;
+    padding: 8px 20px;
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+QPushButton#filter_modal_btn_cancel:hover {
+    background-color: #e2e8f0;
+}
+
+QPushButton#filter_modal_btn_del {
+    font-size: 11px;
+    padding: 2px 6px;
+    background-color: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 3px;
+}
+
+QPushButton#filter_modal_btn_del:hover {
+    background-color: #fee2e2;
+}
+
+/* ========== MatchModal 字段匹配对对话框样式 ========== */
+
+QDialog#match_modal {
+    background-color: #ffffff;
+}
+
+QLabel#match_modal_title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    padding-bottom: 4px;
+}
+
+QLabel#match_modal_subtitle {
+    font-size: 12px;
+    color: #64748b;
+    padding-bottom: 6px;
+}
+
+QTableWidget#match_modal_table {
+    font-size: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background-color: #ffffff;
+    gridline-color: #f1f5f9;
+}
+
+QTableWidget#match_modal_table::item {
+    padding: 4px 6px;
+}
+
+QPushButton#match_modal_btn_add {
+    font-size: 12px;
+    padding: 6px 14px;
+    background-color: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#match_modal_btn_add:hover {
+    background-color: #0369a1;
+}
+
+QPushButton#match_modal_btn_ok {
+    font-size: 12px;
+    padding: 8px 20px;
+    background-color: #0284c7;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#match_modal_btn_ok:hover {
+    background-color: #0369a1;
+}
+
+QPushButton#match_modal_btn_cancel {
+    font-size: 12px;
+    padding: 8px 20px;
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+}
+
+QPushButton#match_modal_btn_cancel:hover {
+    background-color: #e2e8f0;
+}
+
+QPushButton#match_modal_btn_del {
+    font-size: 11px;
+    padding: 2px 6px;
+    background-color: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 3px;
+}
+
+QPushButton#match_modal_btn_del:hover {
+    background-color: #fee2e2;
+}
+

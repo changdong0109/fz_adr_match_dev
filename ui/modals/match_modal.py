@@ -252,28 +252,52 @@ class MatchModal(QDialog):
         self._add_pair_to_table(src, tgt)
     
     def _on_source_double_click(self, item: QListWidgetItem):
-        """双击源表字段 - 如果右边已选中则直接添加"""
+        """双击源表字段"""
         if item.text().startswith("("):
             return
         
+        src = item.text()
+        
+        # 优先使用右边已选中的
         tgt_item = self.target_list.currentItem()
         if tgt_item and not tgt_item.text().startswith("("):
-            src = item.text()
             tgt = tgt_item.text()
-            if not self._pair_exists(src, tgt):
-                self._add_pair_to_table(src, tgt)
+        else:
+            # 尝试找同名字段
+            tgt = src if src in self._target_fields else None
+            if tgt:
+                # 自动选中同名字段
+                for i in range(self.target_list.count()):
+                    if self.target_list.item(i).text() == tgt:
+                        self.target_list.setCurrentRow(i)
+                        break
+        
+        if tgt and not self._pair_exists(src, tgt):
+            self._add_pair_to_table(src, tgt)
     
     def _on_target_double_click(self, item: QListWidgetItem):
-        """双击目标表字段 - 如果左边已选中则直接添加"""
+        """双击目标表字段"""
         if item.text().startswith("("):
             return
         
+        tgt = item.text()
+        
+        # 优先使用左边已选中的
         src_item = self.source_list.currentItem()
         if src_item and not src_item.text().startswith("("):
             src = src_item.text()
-            tgt = item.text()
-            if not self._pair_exists(src, tgt):
-                self._add_pair_to_table(src, tgt)
+        else:
+            # 尝试找同名字段
+            src = tgt if tgt in self._source_fields else None
+            if src:
+                # 自动选中同名字段
+                for i in range(self.source_list.count()):
+                    if self.source_list.item(i).text() == src:
+                        self.source_list.setCurrentRow(i)
+                        break
+        
+        if src and not self._pair_exists(src, tgt):
+            self._add_pair_to_table(src, tgt)
     
     def _pair_exists(self, src: str, tgt: str) -> bool:
         """检查字段对是否已存在"""

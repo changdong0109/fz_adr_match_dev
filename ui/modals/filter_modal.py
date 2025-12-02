@@ -155,12 +155,21 @@ class FilterModal(QDialog):
         
         # 尝试从全局配置获取文件路径
         file_path = self._find_file_path(file_name)
+        print(f"[FilterModal] 查找文件: {file_name} -> {file_path}")
         
         if file_path and os.path.exists(file_path):
             try:
                 # 读取文件头获取字段
                 if file_path.lower().endswith('.csv'):
-                    df = pd.read_csv(file_path, nrows=0, encoding='utf-8')
+                    # 尝试多种编码
+                    for encoding in ['utf-8', 'gbk', 'gb2312', 'utf-8-sig']:
+                        try:
+                            df = pd.read_csv(file_path, nrows=0, encoding=encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    else:
+                        df = pd.read_csv(file_path, nrows=0, encoding='utf-8', errors='ignore')
                 elif file_path.lower().endswith(('.xlsx', '.xls')):
                     df = pd.read_excel(file_path, nrows=0)
                 else:
@@ -168,8 +177,11 @@ class FilterModal(QDialog):
                 
                 if df is not None:
                     self._fields = list(df.columns)
+                    print(f"[FilterModal] 加载到 {len(self._fields)} 个字段")
             except Exception as e:
-                print(f"加载字段失败: {e}")
+                print(f"[FilterModal] 加载字段失败: {e}")
+        else:
+            print(f"[FilterModal] 文件不存在或路径为空")
         
         # 填充字段列表
         for field in self._fields:
@@ -194,24 +206,43 @@ class FilterModal(QDialog):
                 parent = parent.parent()
         
         if not self._global_config:
+            print(f"[FilterModal] 无法获取全局配置")
             return None
         
         region_info = self._global_config.get_region_info()
         customer_folder = region_info.get('customer_folder', '')
         shp_folder = region_info.get('shp_folder', '')
         
+        print(f"[FilterModal] 查找文件: {file_name}")
+        print(f"[FilterModal] customer_folder: {customer_folder}")
+        print(f"[FilterModal] shp_folder: {shp_folder}")
+        
         # 在客户数据文件夹查找
-        if customer_folder:
+        if customer_folder and os.path.isdir(customer_folder):
             path = os.path.join(customer_folder, file_name)
             if os.path.exists(path):
                 return path
+            # 尝试模糊匹配（文件名可能有空格或特殊字符）
+            for f in os.listdir(customer_folder):
+                if f.lower() == file_name.lower():
+                    return os.path.join(customer_folder, f)
+                # 匹配不带扩展名的情况
+                if os.path.splitext(f)[0].lower() == os.path.splitext(file_name)[0].lower():
+                    return os.path.join(customer_folder, f)
         
         # 在SHP数据文件夹查找
-        if shp_folder:
+        if shp_folder and os.path.isdir(shp_folder):
             path = os.path.join(shp_folder, file_name)
             if os.path.exists(path):
                 return path
+            # 尝试模糊匹配
+            for f in os.listdir(shp_folder):
+                if f.lower() == file_name.lower():
+                    return os.path.join(shp_folder, f)
+                if os.path.splitext(f)[0].lower() == os.path.splitext(file_name)[0].lower():
+                    return os.path.join(shp_folder, f)
         
+        print(f"[FilterModal] 未找到文件: {file_name}")
         return None
     
     def _on_field_double_clicked(self, item: QListWidgetItem):

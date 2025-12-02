@@ -1211,8 +1211,9 @@ QListWidget#step4_task_list::item {
 }
 
 QListWidget#step4_task_list::item:selected {
-    background-color: #e0f2fe;
-    border-left: 3px solid #0284c7;
+    background-color: #0284c7;
+    border-left: 3px solid #0369a1;
+    color: #ffffff;
 }
 
 QListWidget#step4_task_list::item:hover:!selected {

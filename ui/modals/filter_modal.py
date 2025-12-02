@@ -138,6 +138,9 @@ class FilterModal(QDialog):
         self._target_name = name
         self.title_label.setText(f"目标表过滤条件 - {name}")
         
+        print(f"[FilterModal] set_target_name: {name}")
+        print(f"[FilterModal] _global_config 存在: {self._global_config is not None}")
+        
         # 加载字段列表
         self._load_fields(name)
         
@@ -213,36 +216,54 @@ class FilterModal(QDialog):
         customer_folder = region_info.get('customer_folder', '')
         shp_folder = region_info.get('shp_folder', '')
         
-        print(f"[FilterModal] 查找文件: {file_name}")
-        print(f"[FilterModal] customer_folder: {customer_folder}")
-        print(f"[FilterModal] shp_folder: {shp_folder}")
+        print(f"[FilterModal] 查找文件: '{file_name}'")
+        print(f"[FilterModal] customer_folder: '{customer_folder}'")
+        print(f"[FilterModal] shp_folder: '{shp_folder}'")
         
         # 在客户数据文件夹查找
         if customer_folder and os.path.isdir(customer_folder):
+            files_in_dir = os.listdir(customer_folder)
+            print(f"[FilterModal] customer_folder 文件列表: {files_in_dir[:5]}...")  # 显示前5个
+            
             path = os.path.join(customer_folder, file_name)
             if os.path.exists(path):
+                print(f"[FilterModal] 精确匹配: {path}")
                 return path
+            
             # 尝试模糊匹配（文件名可能有空格或特殊字符）
-            for f in os.listdir(customer_folder):
+            for f in files_in_dir:
                 if f.lower() == file_name.lower():
+                    print(f"[FilterModal] 大小写匹配: {f}")
                     return os.path.join(customer_folder, f)
                 # 匹配不带扩展名的情况
                 if os.path.splitext(f)[0].lower() == os.path.splitext(file_name)[0].lower():
+                    print(f"[FilterModal] 不带扩展名匹配: {f}")
+                    return os.path.join(customer_folder, f)
+                # 包含匹配（处理空格等问题）
+                if file_name.replace(" ", "") in f.replace(" ", "") or f.replace(" ", "") in file_name.replace(" ", ""):
+                    print(f"[FilterModal] 包含匹配: {f}")
                     return os.path.join(customer_folder, f)
         
         # 在SHP数据文件夹查找
         if shp_folder and os.path.isdir(shp_folder):
+            files_in_dir = os.listdir(shp_folder)
+            print(f"[FilterModal] shp_folder 文件列表: {files_in_dir[:5]}...")  # 显示前5个
+            
             path = os.path.join(shp_folder, file_name)
             if os.path.exists(path):
+                print(f"[FilterModal] 精确匹配: {path}")
                 return path
+            
             # 尝试模糊匹配
-            for f in os.listdir(shp_folder):
+            for f in files_in_dir:
                 if f.lower() == file_name.lower():
                     return os.path.join(shp_folder, f)
                 if os.path.splitext(f)[0].lower() == os.path.splitext(file_name)[0].lower():
                     return os.path.join(shp_folder, f)
+                if file_name.replace(" ", "") in f.replace(" ", "") or f.replace(" ", "") in file_name.replace(" ", ""):
+                    return os.path.join(shp_folder, f)
         
-        print(f"[FilterModal] 未找到文件: {file_name}")
+        print(f"[FilterModal] 未找到文件: '{file_name}'")
         return None
     
     def _on_field_double_clicked(self, item: QListWidgetItem):

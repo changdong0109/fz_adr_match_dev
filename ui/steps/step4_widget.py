@@ -237,14 +237,16 @@ class Step4Widget(BaseStepWidget):
         header = self.tgt_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         header.resizeSection(0, 35)  # 序
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 目标表
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 目标表（自动拉伸）
+        header.setMinimumSectionSize(150)  # 最小列宽
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(2, 65)  # 过滤条件
+        header.resizeSection(2, 60)  # 过滤条件
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 65)  # 匹配字段
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # 匹配方式说明
+        header.resizeSection(3, 60)  # 匹配字段
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(4, 120)  # 匹配方式说明
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 100)  # 操作
+        header.resizeSection(5, 90)  # 操作
         
         tgt_layout.addWidget(self.tgt_table)
         

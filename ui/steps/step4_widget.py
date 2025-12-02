@@ -303,47 +303,9 @@ class Step4Widget(BaseStepWidget):
         return panel
     
     def _load_demo_data(self):
-        """加载示例数据"""
-        # 如果没有从全局配置加载到文件，使用示例数据
-        if not self._available_files:
-            self._available_files = [
-                "客户采集数据_2025Q1.csv",
-                "补录地址库.csv",
-                "小区地址库.xlsx",
-                "门牌库_市政.csv",
-                "GIS_小区点位.csv"
-            ]
-            self._update_file_combos()
-        
-        self._task_groups = [
-            {
-                "name": "客户地址匹配门牌库",
-                "enabled": True,
-                "source": self._available_files[0] if self._available_files else "",
-                "source_filter": "",
-                "remark": "先门牌库精确匹配，未命中用小区库兜底",
-                "targets": [
-                    {"table": "门牌库_市政.csv", "filter": "", "match_fields": "2对", "match_desc": "std_addr ↔ mp_addr (模糊)"},
-                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": "1对", "match_desc": "community ↔ name (精确)"}
-                ],
-                "status": "待执行",
-                "progress": 0
-            },
-            {
-                "name": "补录地址匹配",
-                "enabled": True,
-                "source": "补录地址库.csv",
-                "source_filter": "",
-                "remark": "",
-                "targets": [
-                    {"table": "小区地址库.xlsx", "filter": "", "match_fields": "", "match_desc": ""},
-                    {"table": "GIS_小区点位.csv", "filter": "", "match_fields": "", "match_desc": ""}
-                ],
-                "status": "待执行",
-                "progress": 0
-            }
-        ]
-        
+        """初始化任务组数据"""
+        # 初始化为空列表，由用户手动添加
+        self._task_groups = []
         self._refresh_task_list()
     
     def _refresh_task_list(self):

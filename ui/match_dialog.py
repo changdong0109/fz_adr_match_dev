@@ -394,11 +394,24 @@ class MatchDialog(QDialog):
                 self._log(f"[错误] 打开过滤条件对话框失败：{e}", "error")
         return ""
     
-    def _open_match_modal(self, target_name: str):
-        """打开字段匹配对模态对话框"""
+    def _open_match_modal(self, source_name: str, target_name: str) -> str:
+        """打开字段关联配置对话框"""
         if self.match_modal is not None:
             try:
-                self.match_modal.set_target_name(target_name)
-                self.match_modal.exec()
+                # 设置获取分析结果的回调
+                step3 = self.step_widgets.get(3)
+                if step3 and hasattr(step3, 'get_all_relations'):
+                    self.match_modal.set_relations_callback(step3.get_all_relations)
+                
+                # 设置全局配置
+                if self.global_config:
+                    self.match_modal.set_global_config(self.global_config)
+                
+                # 设置源表和目标表
+                self.match_modal.set_source_and_target(source_name, target_name)
+                
+                if self.match_modal.exec() == QDialog.DialogCode.Accepted:
+                    return self.match_modal.get_summary()
             except Exception as e:
-                self._log(f"[错误] 打开字段匹配对话框失败：{e}", "error")
+                self._log(f"[错误] 打开字段关联对话框失败：{e}", "error")
+        return ""

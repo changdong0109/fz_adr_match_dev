@@ -20,11 +20,11 @@ class Step4Widget(BaseStepWidget):
     """Step4: 匹配任务管理 - 左右分栏布局"""
     
     def __init__(self, parent=None, log_callback: Optional[Callable[[str, str], None]] = None, 
-                 task_manager=None, open_filter_modal: Optional[Callable[[str], None]] = None,
-                 open_match_modal: Optional[Callable[[str], None]] = None,
+                 task_manager=None, open_filter_modal: Optional[Callable[[str], str]] = None,
+                 open_match_modal: Optional[Callable[[str, str], str]] = None,
                  global_config=None):
-        self.open_filter_modal = open_filter_modal or (lambda x: None)
-        self.open_match_modal = open_match_modal or (lambda x: None)
+        self.open_filter_modal = open_filter_modal or (lambda x: "")
+        self.open_match_modal = open_match_modal or (lambda x, y: "")
         self.global_config = global_config
         self._task_groups: List[Dict] = []
         self._current_group_idx = -1
@@ -573,15 +573,50 @@ class Step4Widget(BaseStepWidget):
                 self._log("[Step4] 请先选择目标表", "warning")
     
     def _open_target_match(self, row: int):
-        """打开目标表字段匹配对话框"""
-        # 从表格中获取实际行的下拉框
+        """打开目标表字段关联对话框"""
+        if self._current_group_idx < 0:
+            return
+        
+        # 获取源表名称
+        src_name = self.combo_src.currentText()
+        if not src_name:
+            self._log("[Step4] 请先选择源表", "warning")
+            return
+        
+        # 获取目标表名称
         combo = self.tgt_table.cellWidget(row, 1)
-        if combo:
-            tgt_name = combo.currentText()
-            if tgt_name:
-                self.open_match_modal(tgt_name)
+        if not combo:
+            return
+        
+        tgt_name = combo.currentText()
+        if not tgt_name:
+            self._log("[Step4] 请先选择目标表", "warning")
+            return
+        
+        # 使用带前缀的 key
+        src_key = f"[源表]{src_name}"
+        tgt_key = f"[目标表{row+1}]{tgt_name}"
+        
+        # 调用并获取返回值
+        summary = self.open_match_modal(src_key, tgt_key)
+        
+        # 更新按钮状态
+        btn_match = self.tgt_table.cellWidget(row, 3)
+        if btn_match:
+            if summary:
+                btn_match.setText(summary)
+                btn_match.setObjectName("step4_btn_config_done")
             else:
-                self._log("[Step4] 请先选择目标表", "warning")
+                btn_match.setText("设置")
+                btn_match.setObjectName("step4_btn_config")
+            btn_match.style().unpolish(btn_match)
+            btn_match.style().polish(btn_match)
+        
+        # 保存到任务组
+        group = self._task_groups[self._current_group_idx]
+        targets = group.get("targets", [])
+        if row < len(targets):
+            targets[row]["match_fields"] = summary
     
     def _save_current_config(self):
         """保存当前任务组配置"""

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="fdd597e9-47e8-412b-94ae-e3779cf7135e" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/AI_PROMPT_TEMPLATE.md" beforeDir="false" afterPath="$PROJECT_DIR$/AI_PROMPT_TEMPLATE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AI_QUICK_REFERENCE.md" beforeDir="false" afterPath="$PROJECT_DIR$/AI_QUICK_REFERENCE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/PROJECT_DOCUMENTATION.md" beforeDir="false" afterPath="$PROJECT_DIR$/PROJECT_DOCUMENTATION.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/core/data_loader.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/data_loader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/match_dialog.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/match_dialog.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/steps/step2_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/steps/step2_widget.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/steps/step3_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/steps/step3_widget.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/steps/step4_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/steps/step4_widget.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/steps/step5_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/steps/step5_widget.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/styles.qss" beforeDir="false" afterPath="$PROJECT_DIR$/ui/styles.qss" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ui/widgets/base_step_widget.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/widgets/base_step_widget.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 7
+}</component>
+  <component name="ProjectId" id="36936vLsSBG997mFAD4MRC32Em3" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-b26f3e71634d-JavaScript-PY-251.26094.141" />
+        <option value="bundled-python-sdk-9f8e2b94138c-36ea0e71a18c-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-251.26094.141" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="fdd597e9-47e8-412b-94ae-e3779cf7135e" name="Changes" comment="" />
+      <created>1764404787593</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1764404787593</updated>
+      <workItem from="1764404788704" duration="30000" />
+      <workItem from="1764435098880" duration="727000" />
+      <workItem from="1764559548514" duration="39000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

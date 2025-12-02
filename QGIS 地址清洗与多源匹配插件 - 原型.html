@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<!-- saved from url=(0228)file:///C:/Users/chang/Desktop/%E7%B3%BB%E7%BB%9F%E5%88%9D%E5%A7%8B%E5%8C%96%E6%95%B0%E6%8D%AE/%E5%BB%8A%E5%9D%8A%E6%95%B0%E6%8D%AE%E5%A4%84%E7%90%86/%E6%A0%87%E5%87%86%E5%8C%96%E8%BE%93%E5%87%BA/%E5%BB%8A%E5%9D%8A/GIS/test.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <title>QGIS 地址清洗与多源匹配插件 - 原型</title>
+  <style>
+    :root{
+      --primary:#2563eb;
+      --primary-soft:#e0ecff;
+      --primary-dark:#1d4ed8;
+      --border:#d1d5db;
+      --bg:#f3f4f6;
+      --bg-panel:#ffffff;
+      --text-main:#111827;
+      --text-sub:#6b7280;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft Yahei",sans-serif;}
+    body{background:var(--bg);color:var(--text-main);}
+    .app{display:flex;height:100vh;max-height:100vh;overflow:hidden;}
+    .sidebar{width:230px;background:#111827;color:#e5e7eb;display:flex;flex-direction:column;}
+    .sidebar-header{padding:14px 14px;border-bottom:1px solid #1f2937;font-size:14px;font-weight:600;}
+    .step-list{list-style:none;margin:0;padding:8px 0;flex:1;overflow:auto;}
+    .step-item{padding:8px 14px;cursor:pointer;font-size:13px;display:flex;align-items:center;border-left:3px solid transparent;}
+    .step-item span.icon{display:inline-flex;width:20px;margin-right:6px;font-size:11px;color:#9ca3af;}
+    .step-item.active{background:#1f2937;border-left-color:var(--primary);color:#f9fafb;}
+    .step-item:hover:not(.active){background:#111827;}
+    .sidebar-footer{padding:10px 14px;border-top:1px solid #1f2937;font-size:11px;color:#9ca3af;}
+
+    .main{flex:1;display:flex;flex-direction:column;}
+    .main-header{padding:10px 16px;border-bottom:1px solid var(--border);background:#f9fafb;display:flex;justify-content:space-between;align-items:center;}
+    .main-header-title{font-size:14px;font-weight:600;}
+    .main-header-sub{font-size:12px;color:var(--text-sub);}
+    .main-body{flex:1;padding:12px 16px;overflow:auto;}
+    .section{display:none;}
+    .section.active{display:block;}
+
+    .card{background:var(--bg-panel);border-radius:6px;border:1px solid var(--border);padding:10px 12px;margin-bottom:12px;}
+    .card-title{font-size:13px;font-weight:600;margin-bottom:4px;}
+    .card-subtitle{font-size:12px;color:var(--text-sub);margin-bottom:6px;}
+
+    .table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;}
+    .table th,.table td{border:1px solid var(--border);padding:4px 6px;text-align:left;vertical-align:top;}
+    .table th{background:#f3f4f6;font-weight:500;}
+
+    .btn{display:inline-flex;align-items:center;justify-content:center;border-radius:3px;border:1px solid transparent;
+      font-size:12px;padding:4px 8px;cursor:pointer;background:#e5e7eb;color:var(--text-main);margin-right:4px;}
+    .btn-primary{background:var(--primary);border-color:var(--primary-dark);color:#fff;}
+    .btn-primary:hover{background:var(--primary-dark);}
+    .btn-ghost{background:transparent;border-color:var(--border);}
+    .btn-danger{background:#ef4444;border-color:#dc2626;color:#fff;}
+    .btn-sm{padding:3px 7px;font-size:11px;}
+    .btn:disabled{opacity:.5;cursor:default;}
+
+    label{font-size:12px;margin-bottom:2px;display:inline-block;color:#374151;}
+    input[type="text"],select,textarea{
+      padding:4px 6px;border-radius:3px;border:1px solid var(--border);font-size:12px;background:#fff;
+    }
+    textarea{resize:vertical;min-height:60px;width:100%;}
+    input[type="checkbox"],input[type="radio"]{margin-right:4px;}
+
+    .row{display:flex;gap:10px;margin-top:4px;margin-bottom:4px;}
+    .col{flex:1;}
+
+    .muted{font-size:11px;color:#9ca3af;}
+    .badge{font-size:11px;background:#e5e7eb;border-radius:3px;padding:1px 4px;margin-left:4px;}
+    .tag{display:inline-block;padding:1px 6px;font-size:11px;border-radius:999px;background:#e5e7eb;color:#374151;}
+    .tag-ok{background:#dcfce7;color:#15803d;}
+    .tag-warn{background:#fef3c7;color:#92400e;}
+    .tag-bad{background:#fee2e2;color:#b91c1c;}
+
+    .flex-between{display:flex;align-items:center;justify-content:space-between;}
+    .flex{display:flex;align-items:center;}
+
+    .task-progress{position:relative;width:100%;height:7px;background:#e5e7eb;border-radius:999px;overflow:hidden;}
+    .task-progress-inner{position:absolute;left:0;top:0;bottom:0;width:0%;background:linear-gradient(90deg,var(--primary),var(--primary-dark));border-radius:999px;transition:width .2s ease-out;}
+    .task-progress-label{font-size:11px;color:#6b7280;}
+
+    .log-panel{font-size:11px;max-height:200px;overflow:auto;background:#111827;color:#e5e7eb;padding:6px 8px;border-radius:4px;}
+    .log-line{margin-bottom:2px;white-space:nowrap;}
+    .log-line.info{color:#9ca3af;}
+    .log-line.success{color:#bbf7d0;}
+    .log-line.error{color:#fecaca;}
+    .log-line.warn{color:#fde68a;}
+
+    .file-config{margin-top:6px;border-top:1px dashed var(--border);padding-top:6px;}
+    .combo-block{border:1px dashed var(--border);border-radius:4px;padding:6px;margin-bottom:6px;background:#f9fafb;}
+    .combo-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+    .combo-title{font-size:12px;font-weight:500;}
+    .field-table th,.field-table td{font-size:12px;}
+
+    .graph-placeholder{border:1px dashed var(--border);border-radius:4px;height:220px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#9ca3af;background:#f9fafb;}
+
+    .link-btn{font-size:11px;color:#2563eb;text-decoration:underline;cursor:pointer;}
+
+    /* Modal */
+    .modal-backdrop{
+      position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(15,23,42,0.45);
+      display:none;align-items:center;justify-content:center;z-index:20;
+    }
+    .modal{background:#fff;border-radius:6px;border:1px solid var(--border);padding:10px 12px;min-width:520px;max-height:80vh;overflow:auto;}
+    .modal-title{font-size:13px;font-weight:600;margin-bottom:4px;}
+    .modal-footer{margin-top:6px;text-align:right;}
+
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- 左侧导航 -->
+  <aside class="sidebar">
+    <div class="sidebar-header">地址清洗 &amp; 多源匹配插件</div>
+    <ul class="step-list">
+      <li class="step-item" data-step="1"><span class="icon">①</span>Step1 文件导入</li>
+      <li class="step-item active" data-step="2"><span class="icon">②</span>Step2 字段映射与清洗</li>
+      <li class="step-item" data-step="3"><span class="icon">③</span>Step3 标准化解析 &amp; 关联</li>
+      <li class="step-item" data-step="4"><span class="icon">④</span>Step4 匹配任务管理</li>
+      <li class="step-item" data-step="5"><span class="icon">⑤</span>Step5 导出 &amp; 日志</li>
+    </ul>
+    <div class="sidebar-footer">
+      工作台模式：任意步骤可单独执行，支持增量数据多次处理。
+    </div>
+  </aside>
+
+  <!-- 主区域 -->
+  <div class="main">
+    <header class="main-header">
+      <div>
+        <div class="main-header-title" id="headerTitle">Step2 字段映射与清洗</div>
+        <div class="main-header-sub" id="headerSub">为每个文件配置多个字段组合，一次性批量清洗。</div>
+      </div>
+      <div>
+        <span class="badge">当前项目：Demo</span>
+        <span class="badge">模式：QGIS 插件原型</span>
+      </div>
+    </header>
+
+    <main class="main-body">
+      <!-- Step1 -->
+      <section class="section" data-step="1">
+        <div class="card">
+          <div class="card-title">数据源文件列表</div>
+          <div class="card-subtitle">
+            示例：多源异构文件（客户采集、补录、GIS 等），标记参与任务与当前状态。
+          </div>
+          <div style="margin-bottom:6px;">
+            <button class="btn btn-primary btn-sm" onclick="appendLog(&#39;info&#39;,&#39;[示意] 添加文件&#39;)">添加文件</button>
+            <button class="btn btn-sm">移除选中</button>
+            <button class="btn btn-sm">刷新</button>
+          </div>
+          <table class="table">
+            <thead>
+            <tr>
+              <th style="width:24px;"><input type="checkbox"></th>
+              <th>文件名</th>
+              <th>来源类型</th>
+              <th>参与任务</th>
+              <th>字段组合数</th>
+              <th>清洗状态</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+              <td><input type="checkbox" checked=""></td>
+              <td>客户采集数据_2025Q1.csv</td>
+              <td>
+                <select>
+                  <option selected="">客户采集数据</option>
+                  <option>GIS 数据</option>
+                  <option>其他</option>
+                </select>
+              </td>
+              <td><label><input type="checkbox" checked=""> 参与</label></td>
+              <td>2 个组合</td>
+              <td><span class="tag-ok tag">已清洗</span></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" checked=""></td>
+              <td>小区地址库.xlsx</td>
+              <td>
+                <select>
+                  <option>客户采集数据</option>
+                  <option>GIS 数据</option>
+                  <option selected="">其他</option>
+                </select>
+              </td>
+              <td><label><input type="checkbox" checked=""> 参与</label></td>
+              <td>1 个组合</td>
+              <td><span class="tag">未清洗</span></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" checked=""></td>
+              <td>补录地址库_现场.csv</td>
+              <td>
+                <select>
+                  <option selected="">客户采集数据</option>
+                  <option>GIS 数据</option>
+                  <option>其他</option>
+                </select>
+              </td>
+              <td><label><input type="checkbox" checked=""> 参与</label></td>
+              <td>1 个组合</td>
+              <td><span class="tag">未清洗</span></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" checked=""></td>
+              <td>管网GIS_小区点位.shp</td>
+              <td>
+                <select>
+                  <option>客户采集数据</option>
+                  <option selected="">GIS 数据</option>
+                  <option>其他</option>
+                </select>
+              </td>
+              <td><label><input type="checkbox" checked=""> 参与</label></td>
+              <td>1 个组合</td>
+              <td><span class="tag-ok tag">已清洗</span></td>
+            </tr>
+            </tbody>
+          </table>
+          <div class="muted" style="margin-top:4px;">
+            这里只是“任务参与的文件池”，真正字段拼接和清洗逻辑在 Step2 按文件配置。
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">辅助：shp → Excel 转换</div>
+          <div class="card-subtitle">
+            将 GIS 图层转表，方便后续统一以“表”的视角做字段操作。
+          </div>
+          <div class="row">
+            <div class="col">
+              <label>选择 shp 文件或文件夹</label>
+              <div class="flex">
+                <input type="text" style="flex:1;" value="D:\qgis\layers\">
+                <button class="btn btn-sm">浏览...</button>
+              </div>
+              <label class="muted"><input type="checkbox" checked=""> 转换完成后自动加入上方数据源列表</label>
+            </div>
+          </div>
+          <div class="flex-between">
+            <div class="task-progress" style="margin-right:8px;">
+              <div class="task-progress-inner" id="bar-shp"></div>
+            </div>
+            <div class="flex">
+              <div class="task-progress-label" id="label-shp">空闲</div>
+              <button class="btn btn-primary btn-sm" onclick="startTask(&#39;shp&#39;,&#39;批量 shp→Excel...&#39;)">执行</button>
+              <button class="btn btn-sm" onclick="pauseTask(&#39;shp&#39;)">暂停</button>
+              <button class="btn btn-danger btn-sm" onclick="stopTask(&#39;shp&#39;)">终止</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step2：字段映射与清洗 -->
+      <section class="section active" data-step="2">
+        <div class="card">
+          <div class="card-title">参与任务文件配置进度</div>
+          <div class="card-subtitle">
+            每个文件可以配置多个“字段组合”；配置好后统一批量清洗。
+          </div>
+          <table class="table">
+            <thead>
+            <tr>
+              <th style="width:26px;">当前</th>
+              <th>文件名</th>
+              <th>字段组合数</th>
+              <th>已配置</th>
+              <th>清洗状态</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+              <td style="text-align:center;"><input type="radio" name="cfgFile" checked="" onclick="showFileConfig(&#39;file1&#39;)"></td>
+              <td>客户采集数据_2025Q1.csv</td>
+              <td>2</td>
+              <td><span class="tag-ok tag">是</span></td>
+              <td><span class="tag-ok tag">已清洗</span></td>
+            </tr>
+            <tr>
+              <td style="text-align:center;"><input type="radio" name="cfgFile" onclick="showFileConfig(&#39;file2&#39;)"></td>
+              <td>小区地址库.xlsx</td>
+              <td>1</td>
+              <td><span class="tag-ok tag">是</span></td>
+              <td><span class="tag">未清洗</span></td>
+            </tr>
+            <tr>
+              <td style="text-align:center;"><input type="radio" name="cfgFile" onclick="showFileConfig(&#39;file3&#39;)"></td>
+              <td>补录地址库_现场.csv</td>
+              <td>1</td>
+              <td><span class="tag-warn tag">部分</span></td>
+              <td><span class="tag">未清洗</span></td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 每个文件的字段组合配置 -->
+        <div class="card">
+          <div class="card-title">字段组合与字段顺序（当前文件）</div>
+          <div class="card-subtitle">
+            一个文件可以有多个“组合”；每个组合下的字段顺序定义拼接顺序，系统不做智能推荐，只按你选的字段 &amp; 顺序执行清洗。
+          </div>
+
+          <!-- file1 配置示例 -->
+          <div class="file-config" id="cfg-file1" style="display: none;">
+            <div class="muted">当前文件：客户采集数据_2025Q1.csv</div>
+
+            <!-- 组合1 -->
+            <div class="combo-block">
+              <div class="combo-header">
+                <div class="combo-title">
+                  组合 1：标准地址组合
+                  <span class="muted">（城市+小区+详细地址）</span>
+                </div>
+                <div>
+                  <button class="btn btn-sm btn-danger" onclick="removeCombo(this)">删除组合</button>
+                </div>
+              </div>
+              <table class="table field-table">
+                <thead>
+                <tr>
+                  <th style="width:30px;">顺序</th>
+                  <th>角色名称（备注）</th>
+                  <th>字段（当前文件列）</th>
+                  <th style="width:80px;">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                  <td>1</td>
+                  <td><input type="text" value="城市"></td>
+                  <td>
+                    <select>
+                      <option>std_city</option>
+                      <option>province</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td><input type="text" value="小区名"></td>
+                  <td>
+                    <select>
+                      <option>community_name</option>
+                      <option>estate_name</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td><input type="text" value="详细地址"></td>
+                  <td>
+                    <select>
+                      <option>addr_detail</option>
+                      <option>door_info</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                </tbody>
+              </table>
+              <button class="btn btn-sm btn-ghost" onclick="addFieldRow(this)">+ 新增字段</button>
+            </div>
+
+            <!-- 组合2 -->
+            <div class="combo-block">
+              <div class="combo-header">
+                <div class="combo-title">
+                  组合 2：小区+门牌号
+                </div>
+                <div>
+                  <button class="btn btn-sm btn-danger" onclick="removeCombo(this)">删除组合</button>
+                </div>
+              </div>
+              <table class="table field-table">
+                <thead>
+                <tr>
+                  <th style="width:30px;">顺序</th>
+                  <th>角色名称（备注）</th>
+                  <th>字段（当前文件列）</th>
+                  <th style="width:80px;">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                  <td>1</td>
+                  <td><input type="text" value="小区名"></td>
+                  <td>
+                    <select>
+                      <option>community_name</option>
+                      <option>estate_name</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td><input type="text" value="门牌号"></td>
+                  <td>
+                    <select>
+                      <option>door_no</option>
+                      <option>addr_detail</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td><input type="text" value="门牌号"></td>
+                  <td>
+                    <select>
+                      <option>door_no</option>
+                      <option>addr_detail</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr></tbody>
+              </table>
+              <button class="btn btn-sm btn-ghost" onclick="addFieldRow(this)">+ 新增字段</button>
+            </div>
+
+            <button class="btn btn-sm btn-primary" onclick="addCombo(this)">+ 新增字段组合</button>
+            <div class="muted" style="margin-top:4px;">
+              拼接顺序 = 行顺序；你后端只拿字段名 &amp; 顺序去做清洗，角色名称只是备注。
+            </div>
+          </div>
+
+          <!-- file2 配置示例 -->
+          <div class="file-config" id="cfg-file2" style="display: block;">
+            <div class="muted">当前文件：小区地址库.xlsx</div>
+            <div class="combo-block">
+              <div class="combo-header">
+                <div class="combo-title">组合 1：小区+详细地址</div>
+                <div>
+                  <button class="btn btn-sm btn-danger" onclick="removeCombo(this)">删除组合</button>
+                </div>
+              </div>
+              <table class="table field-table">
+                <thead>
+                <tr>
+                  <th style="width:30px;">顺序</th>
+                  <th>角色名称（备注）</th>
+                  <th>字段（当前文件列）</th>
+                  <th style="width:80px;">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                  <td>1</td>
+                  <td><input type="text" value="小区名"></td>
+                  <td><select><option>community_name</option><option>poi_name</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td><input type="text" value="详细地址"></td>
+                  <td><select><option>addr_detail</option><option>door_info</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td><input type="text" value="详细地址"></td>
+                  <td><select><option>addr_detail</option><option>door_info</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr></tbody>
+              </table>
+              <button class="btn btn-sm btn-ghost" onclick="addFieldRow(this)">+ 新增字段</button>
+            </div>
+            <div class="combo-block">
+              <div class="combo-header">
+                <div class="combo-title">组合 1：小区+详细地址</div>
+                <div>
+                  <button class="btn btn-sm btn-danger" onclick="removeCombo(this)">删除组合</button>
+                </div>
+              </div>
+              <table class="table field-table">
+                <thead>
+                <tr>
+                  <th style="width:30px;">顺序</th>
+                  <th>角色名称（备注）</th>
+                  <th>字段（当前文件列）</th>
+                  <th style="width:80px;">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                  <td>1</td>
+                  <td><input type="text" value="小区名"></td>
+                  <td><select><option>community_name</option><option>poi_name</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td><input type="text" value="详细地址"></td>
+                  <td><select><option>addr_detail</option><option>door_info</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td><input type="text" value="详细地址"></td>
+                  <td><select><option>addr_detail</option><option>door_info</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr></tbody>
+              </table>
+              <button class="btn btn-sm btn-ghost" onclick="addFieldRow(this)">+ 新增字段</button>
+            </div><button class="btn btn-sm btn-primary" onclick="addCombo(this)">+ 新增字段组合</button>
+          </div>
+
+          <!-- file3 配置示例 -->
+          <div class="file-config" id="cfg-file3" style="display:none;">
+            <div class="muted">当前文件：补录地址库_现场.csv</div>
+            <div class="combo-block">
+              <div class="combo-header">
+                <div class="combo-title">组合 1：街道+门牌</div>
+                <div>
+                  <button class="btn btn-sm btn-danger" onclick="removeCombo(this)">删除组合</button>
+                </div>
+              </div>
+              <table class="table field-table">
+                <thead>
+                <tr>
+                  <th style="width:30px;">顺序</th>
+                  <th>角色名称（备注）</th>
+                  <th>字段（当前文件列）</th>
+                  <th style="width:80px;">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                  <td>1</td>
+                  <td><input type="text" value="街道"></td>
+                  <td><select><option>street_name</option><option>road</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td><input type="text" value="门牌号"></td>
+                  <td><select><option>door_no</option><option>addr_detail</option></select></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,-1)">上移</button>
+                    <button class="btn btn-sm btn-ghost" onclick="moveRow(this,1)">下移</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                  </td>
+                </tr>
+                </tbody>
+              </table>
+              <button class="btn btn-sm btn-ghost" onclick="addFieldRow(this)">+ 新增字段</button>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="addCombo(this)">+ 新增字段组合</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">批量执行清洗</div>
+          <div class="card-subtitle">
+            对所有“参与任务且已配置组合”的文件统一执行清洗，生成 cleaned_addr / std_full_addr 等字段（具体由你后端定义）。
+          </div>
+          <div class="flex-between">
+            <div class="task-progress" style="margin-right:8px;">
+              <div class="task-progress-inner" id="bar-clean"></div>
+            </div>
+            <div class="flex">
+              <div class="task-progress-label" id="label-clean">空闲</div>
+              <button class="btn btn-primary btn-sm" onclick="startTask(&#39;clean&#39;,&#39;批量清洗所有已配置文件...&#39;)">执行清洗</button>
+              <button class="btn btn-sm" onclick="pauseTask(&#39;clean&#39;)">暂停</button>
+              <button class="btn btn-danger btn-sm" onclick="stopTask(&#39;clean&#39;)">终止</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step3：标准化解析 + 智能关联 -->
+      <section class="section" data-step="3">
+        <div class="card">
+          <div class="card-title">阿里云解析 Key 配置</div>
+          <div class="card-subtitle">这里只保存凭证，解析策略你在后端写死即可。</div>
+          <div class="row">
+            <div class="col">
+              <label>AccessKey / Token</label>
+              <input type="text" style="width:100%;" value="****************">
+              <div class="muted">不会在 UI 暴露其他参数。</div>
+            </div>
+            <div class="col" style="align-self:flex-end;">
+              <button class="btn btn-sm">测试连接</button>
+              <button class="btn btn-sm btn-primary" onclick="appendLog(&#39;info&#39;,&#39;保存阿里云 Key（示意）&#39;)">保存</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">选择已清洗文件，执行标准化解析</div>
+          <div class="card-subtitle">多文件可并行解析，命中缓存的不再调用外部接口。</div>
+          <table class="table">
+            <thead>
+            <tr>
+              <th style="width:24px;"><input type="checkbox" checked=""></th>
+              <th>文件名</th>
+              <th>状态</th>
+              <th>进度</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+              <td><input type="checkbox" checked=""></td>
+              <td>客户采集数据_2025Q1_clean.csv</td>
+              <td><span class="tag">未解析</span></td>
+              <td>
+                <div class="task-progress">
+                  <div class="task-progress-inner" id="bar-parse1" style="width: 0%;"></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" checked=""></td>
+              <td>小区地址库_clean.xlsx</td>
+              <td><span class="tag">部分缓存</span></td>
+              <td>
+                <div class="task-progress">
+                  <div class="task-progress-inner" id="bar-parse2" style="width: 0%;"></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="checkbox"></td>
+              <td>补录地址库_clean.csv</td>
+              <td><span class="tag-ok tag">已解析</span></td>
+              <td>
+                <div class="task-progress">
+                  <div class="task-progress-inner" id="bar-parse3" style="width:100%;"></div>
+                </div>
+              </td>
+            </tr>
+            </tbody>
+          </table>
+          <div class="flex-between" style="margin-top:4px;">
+            <div class="muted">
+              解析结果会生成 std_province/std_city/std_poi 等字段（字段名你自定）。
+            </div>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="startTask(&#39;parse1&#39;,&#39;解析文件1...&#39;);startTask(&#39;parse2&#39;,&#39;解析文件2...&#39;)">解析选中</button>
+              <button class="btn btn-sm" onclick="pauseTask(&#39;parse1&#39;);pauseTask(&#39;parse2&#39;)">全部暂停</button>
+              <button class="btn btn-danger btn-sm" onclick="stopTask(&#39;parse1&#39;);stopTask(&#39;parse2&#39;)">全部终止</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">智能关联关系识别（字段层级）</div>
+          <div class="card-subtitle">
+            不参与匹配逻辑，纯展示：根据字段值特征自动识别潜在关联，作为你手工选字段时的参考。
+          </div>
+          <div style="margin-bottom:4px;">
+            <button class="btn btn-primary btn-sm" onclick="refreshGraph()">刷新关联关系</button>
+          </div>
+          <div class="row">
+            <div class="col" style="flex:1.4;">
+              <label>字段列表（示例）</label>
+              <table class="table">
+                <thead><tr><th>文件</th><th>字段</th></tr></thead>
+                <tbody>
+                <tr><td>客户采集数据_2025Q1_std.csv</td><td>std_full_addr</td></tr>
+                <tr><td>客户采集数据_2025Q1_std.csv</td><td>customer_name</td></tr>
+                <tr><td>小区地址库_std.xlsx</td><td>community_name</td></tr>
+                <tr><td>GIS_小区点位_std.shp</td><td>poi_name</td></tr>
+                <tr><td>门牌库_市政_std.csv</td><td>mp_full_addr</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="col" style="flex:2;">
+              <label>字段关联图（示意）</label>
+              <div class="graph-placeholder" id="graphArea">（示意）已刷新字段关联图 —— 实际实现时可用 Canvas/SVG 绘制力导图。</div>
+            </div>
+          </div>
+          <div style="margin-top:6px;">
+            <label>高关联字段对列表（样例）</label>
+            <table class="table">
+              <thead><tr><th>字段 A</th><th>字段 B</th><th>关联度</th></tr></thead>
+              <tbody id="relationTableBody"><tr><td>客户采集数据.std_full_addr</td><td>门牌库_市政.mp_full_addr</td><td>0.97</td></tr><tr><td>客户采集数据.std_full_addr</td><td>小区地址库.full_addr</td><td>0.89</td></tr><tr><td>补录地址库.community_name</td><td>GIS_小区点位.poi_name</td><td>0.82</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step4：匹配任务管理（多个源表任务组） -->
+      <section class="section" data-step="4">
+        <div class="card">
+          <div class="card-title">匹配任务组列表（多源表）</div>
+          <div class="card-subtitle">
+            每个任务组定义：<strong>一个源表</strong> → 若干目标表（带优先级）。任务组之间可以并行执行。
+          </div>
+          <table class="table">
+            <thead>
+            <tr>
+              <th style="width:26px;">启用</th>
+              <th>任务组名称</th>
+              <th>源表</th>
+              <th>目标表数量</th>
+              <th>状态</th>
+              <th>进度</th>
+              <th style="width:160px;">操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr data-group="g1">
+              <td style="text-align:center;"><input type="checkbox" checked=""></td>
+              <td>任务组1：客户地址 ↔ 门牌库 &amp; 小区库</td>
+              <td>客户采集数据_2025Q1_std.csv</td>
+              <td>2</td>
+              <td><span class="tag">未执行</span></td>
+              <td>
+                <div class="task-progress">
+                  <div class="task-progress-inner" id="bar-g1" style="width: 100%;"></div>
+                </div>
+              </td>
+              <td>
+                <div class="task-progress-label" id="label-g1">执行任务组1... 完成 (100%)</div>
+                <button class="btn btn-primary btn-sm" onclick="startTask(&#39;g1&#39;,&#39;执行任务组1...&#39;)">执行</button>
+                <button class="btn btn-sm" onclick="pauseTask(&#39;g1&#39;)">暂停</button>
+                <button class="btn btn-danger btn-sm" onclick="stopTask(&#39;g1&#39;)">终止</button><br>
+                <span class="link-btn" onclick="openGroupConfig(&#39;g1&#39;)">配置</span>
+              </td>
+            </tr>
+            <tr data-group="g2">
+              <td style="text-align:center;"><input type="checkbox" checked=""></td>
+              <td>任务组2：补录地址 ↔ 小区库 &amp; GIS 点位</td>
+              <td>补录地址库_std.csv</td>
+              <td>2</td>
+              <td><span class="tag">未执行</span></td>
+              <td>
+                <div class="task-progress">
+                  <div class="task-progress-inner" id="bar-g2"></div>
+                </div>
+              </td>
+              <td>
+                <div class="task-progress-label" id="label-g2">空闲</div>
+                <button class="btn btn-primary btn-sm" onclick="startTask(&#39;g2&#39;,&#39;执行任务组2...&#39;)">执行</button>
+                <button class="btn btn-sm" onclick="pauseTask(&#39;g2&#39;)">暂停</button>
+                <button class="btn btn-danger btn-sm" onclick="stopTask(&#39;g2&#39;)">终止</button><br>
+                <span class="link-btn" onclick="openGroupConfig(&#39;g2&#39;)">配置</span>
+              </td>
+            </tr>
+            </tbody>
+          </table>
+          <button class="btn btn-sm btn-primary" onclick="appendLog(&#39;info&#39;,&#39;[示意] 新增匹配任务组&#39;)">+ 新增任务组</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title" id="groupCfgTitle">当前任务组配置：任务组1（示例）</div>
+          <div class="card-subtitle">
+            一个源表（From） + 多个目标表（To），行顺序就是目标优先级。匹配成功的记录不会再往后目标表继续匹配（由你后端实现）。
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>源表（From，仅一个）</label>
+              <select style="width:100%;">
+                <option selected="">客户采集数据_2025Q1_std.csv</option>
+                <option>补录地址库_std.csv</option>
+                <option>小区地址库_std.xlsx</option>
+              </select>
+              <label style="margin-top:4px;">源表过滤条件（可多条，类似 WHERE）</label>
+              <table class="table" id="srcCondTable">
+                <thead><tr><th>字段</th><th>运算符</th><th>值</th><th>逻辑</th><th style="width:40px;">操作</th></tr></thead>
+                <tbody>
+                <tr>
+                  <td><input type="text" value="cust_district"></td>
+                  <td>
+                    <select>
+                      <option>=</option>
+                      <option>IN</option>
+                      <option>LIKE</option>
+                    </select>
+                  </td>
+                  <td><input type="text" value="鼓楼区"></td>
+                  <td>
+                    <select>
+                      <option>AND</option>
+                      <option>OR</option>
+                    </select>
+                  </td>
+                  <td><button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button></td>
+                </tr>
+                </tbody>
+              </table>
+              <button class="btn btn-sm btn-ghost" onclick="addSrcCondRow()">+ 新增条件</button>
+            </div>
+
+            <div class="col">
+              <label>说明 / 备注</label>
+              <textarea>示例：
+1）只匹配鼓楼区的居民/商业客户；
+2）先用门牌库匹配，剩余未命中再用小区库； 
+3）匹配算法（精确/模糊混合）在后端实现。</textarea>
+            </div>
+          </div>
+
+          <div style="margin-top:6px;">
+            <div class="card-title" style="margin-bottom:4px;">目标表列表（优先级从上到下）</div>
+            <table class="table" id="targetTable">
+              <thead>
+              <tr>
+                <th style="width:28px;">序</th>
+                <th>目标表</th>
+                <th>过滤条件</th>
+                <th>字段匹配对</th>
+                <th>匹配方式说明</th>
+                <th style="width:60px;">操作</th>
+              </tr>
+              </thead>
+              <tbody>
+              <tr>
+                <td>1</td>
+                <td>
+                  <select>
+                    <option>门牌库_市政_std.csv</option>
+                    <option>小区地址库_std.xlsx</option>
+                    <option>GIS_小区点位_std.shp</option>
+                  </select>
+                </td>
+                <td><span class="link-btn" onclick="openFilterModal(&#39;门牌库_市政_std.csv&#39;)">配置过滤条件</span></td>
+                <td><span class="link-btn" onclick="openMatchModal(&#39;门牌库_市政_std.csv&#39;)">配置字段匹配对</span></td>
+                <td class="muted">先用 std_full_addr ↔ mp_full_addr，城市/区县约束</td>
+                <td>
+                  <button class="btn btn-sm btn-ghost" onclick="moveTargetRow(this,-1)">上</button>
+                  <button class="btn btn-sm btn-ghost" onclick="moveTargetRow(this,1)">下</button>
+                  <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                </td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>
+                  <select>
+                    <option>门牌库_市政_std.csv</option>
+                    <option selected="">小区地址库_std.xlsx</option>
+                    <option>GIS_小区点位_std.shp</option>
+                  </select>
+                </td>
+                <td><span class="link-btn" onclick="openFilterModal(&#39;小区地址库_std.xlsx&#39;)">配置过滤条件</span></td>
+                <td><span class="link-btn" onclick="openMatchModal(&#39;小区地址库_std.xlsx&#39;)">配置字段匹配对</span></td>
+                <td class="muted">community_name ↔ community_name，城市/区县可选约束</td>
+                <td>
+                  <button class="btn btn-sm btn-ghost" onclick="moveTargetRow(this,-1)">上</button>
+                  <button class="btn btn-sm btn-ghost" onclick="moveTargetRow(this,1)">下</button>
+                  <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                </td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>
+                  <select>
+                    <option>门牌库_市政_std.csv</option>
+                    <option selected="">小区地址库_std.xlsx</option>
+                    <option>GIS_小区点位_std.shp</option>
+                  </select>
+                </td>
+                <td><span class="link-btn" onclick="openFilterModal(&#39;小区地址库_std.xlsx&#39;)">配置过滤条件</span></td>
+                <td><span class="link-btn" onclick="openMatchModal(&#39;小区地址库_std.xlsx&#39;)">配置字段匹配对</span></td>
+                <td class="muted">community_name ↔ community_name，城市/区县可选约束</td>
+                <td>
+                  <button class="btn btn-sm btn-ghost" onclick="moveTargetRow(this,-1)">上</button>
+                  <button class="btn btn-sm btn-ghost" onclick="moveTargetRow(this,1)">下</button>
+                  <button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button>
+                </td>
+              </tr></tbody>
+            </table>
+            <button class="btn btn-sm btn-primary" onclick="addTargetRow()">+ 新增目标表</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step5：导出 + 日志 -->
+      <section class="section" data-step="5">
+        <div class="card">
+          <div class="card-title">结果导出</div>
+          <div class="card-subtitle">按类型导出：清洗结果、标准化结果、匹配结果、未匹配数据、关联关系表等。</div>
+          <div class="row">
+            <div class="col">
+              <label>导出内容</label>
+              <label><input type="checkbox" checked=""> 清洗结果（*_clean.*）</label><br>
+              <label><input type="checkbox" checked=""> 标准化结果（*_std.*）</label><br>
+              <label><input type="checkbox" checked=""> 匹配结果（按任务组 &amp; 源→目标输出）</label><br>
+              <label><input type="checkbox" checked=""> 未匹配数据（按源表输出）</label><br>
+              <label><input type="checkbox" checked=""> 字段关联关系（智能关联结果表）</label>
+            </div>
+            <div class="col">
+              <label>输出根目录</label>
+              <div class="flex">
+                <input type="text" style="flex:1;" value="D:\qgis_addr_output\run_2025_02_10\">
+                <button class="btn btn-sm">浏览...</button>
+              </div>
+            </div>
+          </div>
+          <div class="flex-between" style="margin-top:4px;">
+            <div class="task-progress" style="margin-right:8px;">
+              <div class="task-progress-inner" id="bar-export"></div>
+            </div>
+            <div class="flex">
+              <div class="task-progress-label" id="label-export">空闲</div>
+              <button class="btn btn-primary btn-sm" onclick="startTask(&#39;export&#39;,&#39;导出结果文件...&#39;)">执行导出</button>
+              <button class="btn btn-sm" onclick="pauseTask(&#39;export&#39;)">暂停</button>
+              <button class="btn btn-danger btn-sm" onclick="stopTask(&#39;export&#39;)">终止</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">日志工作台</div>
+          <div class="card-subtitle">所有步骤的执行日志集中在这里，方便排错与复盘。</div>
+          <div class="log-panel" id="logPanel">
+            <div class="log-line info">[INFO] 原型初始化完成。</div>
+          <div class="log-line info">[INFO 01:28:07] [INIT] 界面加载完成，待用户配置。</div><div class="log-line info">[INFO 01:29:01] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:02] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:03] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:03] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:03] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:05] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:10] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:10] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:10] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:10] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:11] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:16] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:16] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:41] [Step4] 配置目标表过滤条件：小区地址库_std.xlsx（示意）。</div><div class="log-line info">[INFO 01:29:47] [Step4] 配置字段匹配对：小区地址库_std.xlsx（示意）。</div><div class="log-line info">[INFO 01:29:58] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:58] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:59] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:59] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:59] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:29:59] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:30:00] 执行任务组1...</div><div class="log-line warn">[WARN 01:30:02] [g1] 暂停执行（原型示意）。</div><div class="log-line warn">[WARN 01:30:03] [g1] 终止并重置进度（原型示意）。</div><div class="log-line info">[INFO 01:30:04] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:30:04] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:30:05] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 01:30:07] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:07] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:08] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:08] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:08] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:09] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:09] [Step3] 刷新智能字段关联关系（示意）。</div><div class="log-line info">[INFO 01:30:11] 解析文件1...</div><div class="log-line info">[INFO 01:30:11] 解析文件2...</div><div class="log-line warn">[WARN 01:30:12] [parse1] 暂停执行（原型示意）。</div><div class="log-line warn">[WARN 01:30:12] [parse2] 暂停执行（原型示意）。</div><div class="log-line warn">[WARN 01:30:12] [parse1] 终止并重置进度（原型示意）。</div><div class="log-line warn">[WARN 01:30:12] [parse2] 终止并重置进度（原型示意）。</div><div class="log-line info">[INFO 01:34:00] 执行任务组1...</div><div class="log-line success">[SUCCESS 01:34:04] 执行任务组1... 完成（原型示意）。</div><div class="log-line info">[INFO 01:39:16] [示意] 新增匹配任务组</div><div class="log-line info">[INFO 12:23:48] [Step2] 新增字段组合（示意）。</div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- Modal：目标表过滤条件 -->
+<div class="modal-backdrop" id="filterModal" style="display: none;">
+  <div class="modal">
+    <div class="modal-title" id="filterModalTitle">目标表过滤条件：小区地址库_std.xlsx</div>
+    <div class="card-subtitle" style="margin-bottom:6px;">这里只是配置 UI，具体 SQL/表达式由你后端实现。</div>
+    <table class="table" id="filterCondTable">
+      <thead><tr><th>字段</th><th>运算符</th><th>值</th><th>逻辑</th><th style="width:40px;">操作</th></tr></thead>
+      <tbody>
+      <tr>
+        <td><input type="text" value="city"></td>
+        <td>
+          <select>
+            <option>=</option>
+            <option>IN</option>
+            <option>LIKE</option>
+          </select>
+        </td>
+        <td><input type="text" value="南京市"></td>
+        <td>
+          <select>
+            <option>AND</option>
+            <option>OR</option>
+          </select>
+        </td>
+        <td><button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button></td>
+      </tr>
+      <tr>
+        <td><input type="text" value="city"></td>
+        <td>
+          <select>
+            <option>=</option>
+            <option>IN</option>
+            <option>LIKE</option>
+          </select>
+        </td>
+        <td><input type="text" value="南京市"></td>
+        <td>
+          <select>
+            <option>AND</option>
+            <option>OR</option>
+          </select>
+        </td>
+        <td><button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button></td>
+      </tr><tr>
+        <td><input type="text" value="city"></td>
+        <td>
+          <select>
+            <option>=</option>
+            <option>IN</option>
+            <option>LIKE</option>
+          </select>
+        </td>
+        <td><input type="text" value="南京市"></td>
+        <td>
+          <select>
+            <option>AND</option>
+            <option>OR</option>
+          </select>
+        </td>
+        <td><button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button></td>
+      </tr></tbody>
+    </table>
+    <button class="btn btn-sm btn-ghost" onclick="addFilterRow()">+ 新增条件</button>
+    <div class="modal-footer">
+      <button class="btn btn-sm" onclick="closeModal(&#39;filterModal&#39;)">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal：字段匹配对 -->
+<div class="modal-backdrop" id="matchModal" style="display: none;">
+  <div class="modal">
+    <div class="modal-title" id="matchModalTitle">字段匹配对配置：小区地址库_std.xlsx</div>
+    <div class="card-subtitle" style="margin-bottom:6px;">
+      多对字段完全由你选；“匹配方式”只是告诉后端采用精确/模糊/混合策略，具体算法你决定。
+    </div>
+    <table class="table" id="matchPairTable">
+      <thead><tr><th>源表字段</th><th>匹配方式</th><th>目标表字段</th><th style="width:40px;">操作</th></tr></thead>
+      <tbody>
+      <tr>
+        <td><input type="text" value="std_full_addr"></td>
+        <td>
+          <select>
+            <option>精确</option>
+            <option selected="">模糊</option>
+            <option>精确+模糊</option>
+          </select>
+        </td>
+        <td><input type="text" value="mp_full_addr"></td>
+        <td><button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button></td>
+      </tr>
+      <tr>
+        <td><input type="text" value="std_city"></td>
+        <td>
+          <select>
+            <option selected="">精确</option>
+            <option>模糊</option>
+            <option>精确+模糊</option>
+          </select>
+        </td>
+        <td><input type="text" value="city"></td>
+        <td><button class="btn btn-sm btn-danger" onclick="removeRow(this)">删</button></td>
+      </tr>
+      </tbody>
+    </table>
+    <button class="btn btn-sm btn-ghost" onclick="addMatchRow()">+ 新增字段对</button>
+    <div class="modal-footer">
+      <button class="btn btn-sm" onclick="closeModal(&#39;matchModal&#39;)">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 导航
+  const stepMeta = {
+    "1": {title:"Step1 文件导入", sub:"导入多源文件，管理参与任务的表。"},
+    "2": {title:"Step2 字段映射与清洗", sub:"为每个文件配置多个字段组合，一次性批量清洗。"},
+    "3": {title:"Step3 标准化解析 & 关联", sub:"调用阿里云解析，并展示智能字段关联关系。"},
+    "4": {title:"Step4 匹配任务管理", sub:"多源表任务组：一个源表 → 多目标表，带目标优先级。"},
+    "5": {title:"Step5 导出 & 日志", sub:"按类型导出所有结果，并集中查看日志。"}
+  };
+  const stepItems = document.querySelectorAll('.step-item');
+  const sections  = document.querySelectorAll('.section');
+  const headerTitle = document.getElementById('headerTitle');
+  const headerSub   = document.getElementById('headerSub');
+
+  stepItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const step = item.getAttribute('data-step');
+      stepItems.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      sections.forEach(sec => {
+        sec.classList.toggle('active', sec.getAttribute('data-step') === step);
+      });
+      if (stepMeta[step]) {
+        headerTitle.textContent = stepMeta[step].title;
+        headerSub.textContent   = stepMeta[step].sub;
+      }
+    });
+  });
+
+  // 日志
+  function appendLog(level, msg) {
+    const panel = document.getElementById('logPanel');
+    if (!panel) return;
+    const line = document.createElement('div');
+    line.classList.add('log-line');
+    if (level === 'info') line.classList.add('info');
+    if (level === 'success') line.classList.add('success');
+    if (level === 'error') line.classList.add('error');
+    if (level === 'warn') line.classList.add('warn');
+    const ts = new Date().toLocaleTimeString();
+    line.textContent = `[${level.toUpperCase()} ${ts}] ${msg}`;
+    panel.appendChild(line);
+    panel.scrollTop = panel.scrollHeight;
+  }
+
+  // 通用任务进度
+  const taskState = {};
+  function ensureTask(id) {
+    if (taskState[id]) return taskState[id];
+    const label = document.getElementById('label-' + id);
+    const bar   = document.getElementById('bar-' + id);
+    taskState[id] = {timer:null, progress:0, labelEl:label, barEl:bar, name:''};
+    return taskState[id];
+  }
+  function startTask(id, name) {
+    const state = ensureTask(id);
+    if (state.timer) return;
+    state.name = name || '执行任务...';
+    appendLog('info', state.name);
+    if (state.progress >= 100) state.progress = 0;
+    updateTaskUI(id);
+    state.timer = setInterval(() => {
+      state.progress += Math.random() * 8 + 5;
+      if (state.progress >= 100) {
+        state.progress = 100;
+        clearInterval(state.timer);
+        state.timer = null;
+        appendLog('success', state.name + ' 完成（原型示意）。');
+      }
+      updateTaskUI(id);
+    }, 320);
+  }
+  function pauseTask(id) {
+    const state = ensureTask(id);
+    if (!state.timer) return;
+    clearInterval(state.timer);
+    state.timer = null;
+    appendLog('warn', '['+id+'] 暂停执行（原型示意）。');
+    updateTaskUI(id);
+  }
+  function stopTask(id) {
+    const state = ensureTask(id);
+    if (state.timer) {
+      clearInterval(state.timer);
+      state.timer = null;
+    }
+    state.progress = 0;
+    appendLog('warn', '['+id+'] 终止并重置进度（原型示意）。');
+    updateTaskUI(id);
+  }
+  function updateTaskUI(id) {
+    const state = ensureTask(id);
+    if (state.barEl) state.barEl.style.width = state.progress + '%';
+    if (state.labelEl) {
+      if (state.progress === 0 && !state.timer) {
+        state.labelEl.textContent = '空闲';
+      } else if (state.progress >= 100 && !state.timer) {
+        state.labelEl.textContent = state.name + ' 完成 (100%)';
+      } else {
+        state.labelEl.textContent = state.name + ' ' + state.progress.toFixed(0) + '%（示意）';
+      }
+    }
+  }
+
+  // Step2：切换当前文件配置
+  function showFileConfig(id) {
+    document.querySelectorAll('.file-config').forEach(div => div.style.display = 'none');
+    const cfg = document.getElementById('cfg-' + id);
+    if (cfg) cfg.style.display = 'block';
+  }
+
+  // Step2：字段组合相关
+  function addFieldRow(btn) {
+    const combo = btn.closest('.combo-block');
+    const tbody = combo.querySelector('tbody');
+    const lastRow = tbody.lastElementChild;
+    const newRow = lastRow.cloneNode(true);
+    tbody.appendChild(newRow);
+    resetFieldOrder(tbody);
+  }
+  function removeRow(btn) {
+    const row = btn.closest('tr');
+    const tbody = row.parentNode;
+    if (tbody.rows.length <= 1) {
+      alert('至少保留一行。');
+      return;
+    }
+    tbody.removeChild(row);
+    resetFieldOrder(tbody);
+  }
+  function resetFieldOrder(tbody) {
+    Array.from(tbody.rows).forEach((tr, idx) => {
+      const cell = tr.cells[0];
+      if (cell) cell.textContent = idx+1;
+    });
+  }
+  function moveRow(btn, dir) {
+    const row = btn.closest('tr');
+    const tbody = row.parentNode;
+    const rows = Array.from(tbody.rows);
+    const idx = rows.indexOf(row);
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= rows.length) return;
+    tbody.removeChild(row);
+    if (dir > 0) {
+      tbody.insertBefore(row, rows[idx+1].nextSibling || null);
+    } else {
+      tbody.insertBefore(row, rows[idx-1]);
+    }
+    resetFieldOrder(tbody);
+  }
+  function removeCombo(btn) {
+    const combo = btn.closest('.combo-block');
+    const parent = combo.parentNode;
+    const blocks = parent.querySelectorAll('.combo-block');
+    if (blocks.length <= 1) {
+      alert('至少保留一个组合。');
+      return;
+    }
+    parent.removeChild(combo);
+  }
+  function addCombo(btn) {
+    const fileCfg = btn.closest('.file-config');
+    const firstCombo = fileCfg.querySelector('.combo-block');
+    const clone = firstCombo.cloneNode(true);
+    // 清空字段内值
+    clone.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
+    clone.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
+    fileCfg.insertBefore(clone, btn);
+    appendLog('info','[Step2] 新增字段组合（示意）。');
+  }
+
+  // Step3：刷新关联关系
+  function refreshGraph() {
+    const graphArea = document.getElementById('graphArea');
+    graphArea.textContent = '（示意）已刷新字段关联图 —— 实际实现时可用 Canvas/SVG 绘制力导图。';
+    const tbody = document.getElementById('relationTableBody');
+    tbody.innerHTML = '';
+    const demo = [
+      ['客户采集数据.std_full_addr','门牌库_市政.mp_full_addr','0.97'],
+      ['客户采集数据.std_full_addr','小区地址库.full_addr','0.89'],
+      ['补录地址库.community_name','GIS_小区点位.poi_name','0.82']
+    ];
+    demo.forEach(row => {
+      const tr = document.createElement('tr');
+      row.forEach(t => {
+        const td = document.createElement('td');
+        td.textContent = t;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    appendLog('info','[Step3] 刷新智能字段关联关系（示意）。');
+  }
+
+  // Step4：任务组配置
+  function openGroupConfig(id) {
+    const title = document.getElementById('groupCfgTitle');
+    if (id === 'g1') {
+      title.textContent = '当前任务组配置：任务组1（客户地址 ↔ 门牌库 & 小区库）';
+    } else if (id === 'g2') {
+      title.textContent = '当前任务组配置：任务组2（补录地址 ↔ 小区库 & GIS 点位）';
+    } else {
+      title.textContent = '当前任务组配置';
+    }
+    appendLog('info','[Step4] 打开 '+id+' 配置（示意，仅切标题，不做复杂状态管理）。');
+  }
+
+  function addSrcCondRow() {
+    const table = document.getElementById('srcCondTable').querySelector('tbody');
+    const first = table.rows[0];
+    const clone = first.cloneNode(true);
+    clone.querySelectorAll('input').forEach(i=>i.value='');
+    table.appendChild(clone);
+  }
+
+  function addTargetRow() {
+    const table = document.getElementById('targetTable').querySelector('tbody');
+    const last = table.rows[table.rows.length-1];
+    const clone = last.cloneNode(true);
+    table.appendChild(clone);
+    resetTargetOrder(table);
+  }
+  function moveTargetRow(btn, dir) {
+    const row = btn.closest('tr');
+    const tbody = row.parentNode;
+    const rows = Array.from(tbody.rows);
+    const idx = rows.indexOf(row);
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= rows.length) return;
+    tbody.removeChild(row);
+    if (dir > 0) {
+      tbody.insertBefore(row, rows[idx+1].nextSibling || null);
+    } else {
+      tbody.insertBefore(row, rows[idx-1]);
+    }
+    resetTargetOrder(tbody);
+  }
+  function resetTargetOrder(tbody) {
+    Array.from(tbody.rows).forEach((tr, idx) => {
+      tr.cells[0].textContent = idx+1;
+    });
+  }
+
+  // Modal：过滤条件
+  function openFilterModal(targetName) {
+    document.getElementById('filterModalTitle').textContent = '目标表过滤条件：' + targetName;
+    document.getElementById('filterModal').style.display = 'flex';
+    appendLog('info','[Step4] 配置目标表过滤条件：'+targetName+'（示意）。');
+  }
+  function addFilterRow() {
+    const table = document.getElementById('filterCondTable').querySelector('tbody');
+    const first = table.rows[0];
+    const clone = first.cloneNode(true);
+    clone.querySelectorAll('input').forEach(i=>i.value='');
+    table.appendChild(clone);
+  }
+
+  // Modal：匹配字段对
+  function openMatchModal(targetName) {
+    document.getElementById('matchModalTitle').textContent = '字段匹配对配置：' + targetName;
+    document.getElementById('matchModal').style.display = 'flex';
+    appendLog('info','[Step4] 配置字段匹配对：'+targetName+'（示意）。');
+  }
+  function addMatchRow() {
+    const table = document.getElementById('matchPairTable').querySelector('tbody');
+    const first = table.rows[0];
+    const clone = first.cloneNode(true);
+    clone.querySelectorAll('input').forEach(i=>i.value='');
+    table.appendChild(clone);
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+  }
+
+  // 初始化
+  appendLog('info','[INIT] 界面加载完成，待用户配置。');
+</script>
+
+
+</body></html>

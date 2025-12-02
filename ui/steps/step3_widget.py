@@ -115,6 +115,10 @@ class Step3Widget(BaseStepWidget):
         from qgis.PyQt.QtCore import QTimer
         QTimer.singleShot(100, self._refresh_parse_file_list)
     
+    def get_all_relations(self) -> List[Dict]:
+        """获取所有分析出的关联关系（供其他组件调用）"""
+        return self._all_relations if hasattr(self, '_all_relations') else []
+    
     def showEvent(self, event):
         """当 Widget 显示时刷新文件列表"""
         super().showEvent(event)

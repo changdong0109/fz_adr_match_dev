@@ -239,11 +239,15 @@ class MatchModal(QDialog):
         
         if not src_item or not tgt_item:
             return
-        if src_item.text().startswith("(") or tgt_item.text().startswith("("):
-            return
         
         src = src_item.text()
         tgt = tgt_item.text()
+        
+        # 检查空值和无效值
+        if not src or not tgt:
+            return
+        if src.startswith("(") or tgt.startswith("("):
+            return
         
         # 检查是否已存在
         if self._pair_exists(src, tgt):
@@ -311,6 +315,11 @@ class MatchModal(QDialog):
     
     def _add_pair_to_table(self, src: str, tgt: str, match_type: str = "="):
         """添加字段对到表格"""
+        # 检查源和目标都不为空
+        if not src or not tgt:
+            print(f"[MatchModal] 跳过空值: src={src}, tgt={tgt}")
+            return
+        
         row = self.pair_table.rowCount()
         self.pair_table.insertRow(row)
         

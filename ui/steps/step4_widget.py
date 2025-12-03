@@ -71,8 +71,15 @@ class Step4Widget(BaseStepWidget):
         return None
     
     def _load_available_files(self):
-        """从全局配置加载可用文件列表"""
+        """
+        从全局配置加载可用文件列表
+        
+        优先级：
+        1. 标准化后的文件（*_标准化.csv）- 包含 POI 列，可直接匹配
+        2. 清洗后的文件（*_清洗.csv）- 需要先在 Step3 解析
+        """
         self._available_files = []
+        self._file_paths = {}  # 文件名 -> 完整路径的映射
         
         global_config = self._get_global_config()
         if not global_config:
@@ -80,22 +87,59 @@ class Step4Widget(BaseStepWidget):
             return
         
         region_info = global_config.get_region_info()
+        base_folder = region_info.get('base_folder', '')
+        province = region_info.get('province', '')
+        city = region_info.get('city', '')
+        county = region_info.get('county', '')
+        
+        region_prefix = f"{province}{city}{county}" if county else f"{province}{city}"
+        
+        # 1. 优先扫描标准化结果文件夹（Step3解析后的文件）
+        clean_folders = [
+            os.path.join(base_folder, f"{region_prefix}_客户数据清洗", "清洗后数据"),
+            os.path.join(base_folder, f"{region_prefix}_GIS数据清洗", "清洗后数据"),
+        ]
+        
+        standardized_files = []
+        for folder in clean_folders:
+            if os.path.isdir(folder):
+                for f in os.listdir(folder):
+                    if f.lower().endswith('.csv') and '_标准化' in f:
+                        full_path = os.path.join(folder, f)
+                        if f not in self._file_paths:  # 避免重复
+                            standardized_files.append(f)
+                            self._file_paths[f] = full_path
+        
+        # 2. 如果没有标准化文件，扫描清洗后的文件
+        cleaned_files = []
+        for folder in clean_folders:
+            if os.path.isdir(folder):
+                for f in os.listdir(folder):
+                    if f.lower().endswith('.csv') and '_清洗' in f and f not in self._file_paths:
+                        full_path = os.path.join(folder, f)
+                        cleaned_files.append(f)
+                        self._file_paths[f] = full_path
+        
+        # 3. 原始数据文件夹（备用）
         customer_folder = region_info.get('customer_folder', '')
         shp_folder = region_info.get('shp_folder', '')
         
-        # 扫描客户数据文件夹
-        if customer_folder and os.path.isdir(customer_folder):
-            for f in os.listdir(customer_folder):
-                if f.lower().endswith(('.csv', '.xlsx', '.xls')):
-                    self._available_files.append(f)
+        original_files = []
+        for folder in [customer_folder, shp_folder]:
+            if folder and os.path.isdir(folder):
+                for f in os.listdir(folder):
+                    if f.lower().endswith(('.csv', '.xlsx', '.xls')) and f not in self._file_paths:
+                        full_path = os.path.join(folder, f)
+                        original_files.append(f)
+                        self._file_paths[f] = full_path
         
-        # 扫描SHP数据文件夹
-        if shp_folder and os.path.isdir(shp_folder):
-            for f in os.listdir(shp_folder):
-                if f.lower().endswith(('.csv', '.xlsx', '.xls')):
-                    self._available_files.append(f)
+        # 合并文件列表：标准化 > 清洗 > 原始
+        self._available_files = standardized_files + cleaned_files + original_files
         
-        self._log(f"[Step4] 加载可用文件: {len(self._available_files)} 个", "info")
+        if standardized_files:
+            self._log(f"[Step4] 加载文件: {len(standardized_files)} 个标准化文件, {len(cleaned_files)} 个清洗文件, {len(original_files)} 个原始文件", "info")
+        else:
+            self._log(f"[Step4] 加载文件: {len(self._available_files)} 个（⚠️ 未找到标准化文件，请先在 Step3 执行解析）", "warning")
         
         # 更新下拉框
         self._update_file_combos()
@@ -937,10 +981,14 @@ class Step4Widget(BaseStepWidget):
         target_poi_col = self._detect_poi_column(target_df)
         
         if not poi_col:
-            self._log("[Step4] 源表未找到POI列", "error")
+            hint = self._get_available_columns_hint(source_df)
+            self._log(f"[Step4] 源表 '{source_file}' 未找到POI列（请选择 *_标准化.csv 文件）", "error")
+            self._log(f"[Step4] 可用列: {hint}", "debug")
             return
         if not target_poi_col:
-            self._log("[Step4] 目标表未找到POI列", "error")
+            hint = self._get_available_columns_hint(target_df)
+            self._log(f"[Step4] 目标表 '{target_file}' 未找到POI列（请选择 *_标准化.csv 文件）", "error")
+            self._log(f"[Step4] 可用列: {hint}", "debug")
             return
         
         # 执行预览匹配
@@ -961,30 +1009,82 @@ class Step4Widget(BaseStepWidget):
         """加载文件用于预览"""
         import pandas as pd
         
-        for folder in [region_info.get('customer_folder', ''), 
-                      region_info.get('shp_folder', '')]:
+        # 1. 优先从缓存的路径映射中获取
+        if hasattr(self, '_file_paths') and filename in self._file_paths:
+            filepath = self._file_paths[filename]
+            if os.path.exists(filepath):
+                try:
+                    return self._read_file(filepath)
+                except Exception as e:
+                    self._log(f"[Step4] 读取失败: {e}", "error")
+        
+        # 2. 搜索标准化/清洗文件夹
+        base_folder = region_info.get('base_folder', '')
+        province = region_info.get('province', '')
+        city = region_info.get('city', '')
+        county = region_info.get('county', '')
+        region_prefix = f"{province}{city}{county}" if county else f"{province}{city}"
+        
+        search_folders = [
+            os.path.join(base_folder, f"{region_prefix}_客户数据清洗", "清洗后数据"),
+            os.path.join(base_folder, f"{region_prefix}_GIS数据清洗", "清洗后数据"),
+            region_info.get('customer_folder', ''),
+            region_info.get('shp_folder', ''),
+        ]
+        
+        for folder in search_folders:
             if folder and os.path.isdir(folder):
                 filepath = os.path.join(folder, filename)
                 if os.path.exists(filepath):
                     try:
-                        if filepath.lower().endswith('.csv'):
-                            for enc in ['utf-8', 'gbk', 'gb2312', 'utf-8-sig']:
-                                try:
-                                    return pd.read_csv(filepath, encoding=enc)
-                                except UnicodeDecodeError:
-                                    continue
-                        elif filepath.lower().endswith(('.xlsx', '.xls')):
-                            return pd.read_excel(filepath)
+                        return self._read_file(filepath)
                     except Exception as e:
                         self._log(f"[Step4] 读取失败: {e}", "error")
+        
+        self._log(f"[Step4] 文件未找到: {filename}", "error")
         return None
     
+    def _read_file(self, filepath: str):
+        """读取文件（支持多种编码）"""
+        import pandas as pd
+        
+        if filepath.lower().endswith('.csv'):
+            for enc in ['utf-8', 'gbk', 'gb2312', 'utf-8-sig']:
+                try:
+                    return pd.read_csv(filepath, encoding=enc)
+                except UnicodeDecodeError:
+                    continue
+            raise ValueError(f"无法解析文件编码: {filepath}")
+        elif filepath.lower().endswith(('.xlsx', '.xls')):
+            return pd.read_excel(filepath)
+        else:
+            raise ValueError(f"不支持的文件格式: {filepath}")
+    
     def _detect_poi_column(self, df) -> str:
-        """检测POI列"""
-        for col in ["标准化POI抽取", "predict_poi", "POI", "poi"]:
+        """
+        检测POI列
+        
+        优先级：
+        1. Step3 解析生成的列：'标准化POI抽取'
+        2. 其他常见 POI 列名
+        """
+        # Step3 解析生成的标准列名
+        poi_columns = [
+            "标准化POI抽取",  # Step3 解析生成
+            "predict_poi",    # 原始 API 字段名
+            "POI",            # 通用名称
+            "poi",            # 小写
+            "POI_结构化",     # Step3 结构化 POI
+        ]
+        for col in poi_columns:
             if col in df.columns:
                 return col
         return ""
+    
+    def _get_available_columns_hint(self, df) -> str:
+        """获取可用列提示"""
+        cols = list(df.columns)[:10]
+        return ", ".join(cols) + ("..." if len(df.columns) > 10 else "")
     
     def _show_preview_dialog(self, preview_df):
         """显示预览结果对话框"""

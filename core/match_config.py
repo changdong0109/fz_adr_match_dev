@@ -27,13 +27,13 @@ class MatchConfig:
             },
             "high_confidence": {
                 "description": "高置信度 - 无需人工确认",
-                "fuzzy_min": 95,
-                "with_constraint_fuzzy_min": 92
+                "fuzzy_min": 98,  # 提高：95 -> 98
+                "with_constraint_fuzzy_min": 95  # 提高：92 -> 95
             },
             "need_review": {
                 "description": "需人工确认",
-                "fuzzy_min": 88,
-                "fuzzy_max": 95
+                "fuzzy_min": 90,  # 提高：88 -> 90
+                "fuzzy_max": 98  # 提高：95 -> 98
             },
             "unmatched": {
                 "description": "未匹配",

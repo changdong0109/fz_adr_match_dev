@@ -85,6 +85,9 @@ class MatchExecutor:
         }
         matched_source_indices = set()
         
+        # 记录每个目标表的匹配详情
+        target_details = []
+        
         # 4. 逐个目标表匹配
         for i, target_config in enumerate(valid_targets):
             if self._cancelled:
@@ -103,14 +106,31 @@ class MatchExecutor:
             target_df, target_path = self._load_file(target_file)
             if target_df is None or target_df.empty:
                 self._log(f"[执行器] 目标表加载失败: {target_file}", "warning")
+                target_details.append({
+                    'table': target_file,
+                    'total': 0,
+                    'exact': 0,
+                    'high_confidence': 0,
+                    'need_review': 0,
+                    'status': '加载失败'
+                })
                 continue
             
-            self._log(f"[执行器] 目标表 {target_file}: {len(target_df)} 条", "info")
+            target_total = len(target_df)
+            self._log(f"[执行器] 目标表 {target_file}: {target_total} 条", "info")
             
             # 过滤已匹配的源表记录
             remaining_indices = [idx for idx in source_df.index if idx not in matched_source_indices]
             if not remaining_indices:
                 self._log("[执行器] 所有源表记录已匹配完成", "info")
+                target_details.append({
+                    'table': target_file,
+                    'total': target_total,
+                    'exact': 0,
+                    'high_confidence': 0,
+                    'need_review': 0,
+                    'status': '无剩余记录'
+                })
                 break
             
             remaining_df = source_df.loc[remaining_indices].copy()
@@ -121,6 +141,22 @@ class MatchExecutor:
                 remaining_df, target_df, source_file, target_file
             )
             
+            # 记录本目标表的匹配数量
+            target_exact = len(results.get('exact', []))
+            target_high = len(results.get('high_confidence', []))
+            target_review = len(results.get('need_review', []))
+            target_matched = target_exact + target_high + target_review
+            
+            target_details.append({
+                'table': target_file,
+                'total': target_total,
+                'exact': target_exact,
+                'high_confidence': target_high,
+                'need_review': target_review,
+                'matched': target_matched,
+                'status': '完成'
+            })
+            
             # 合并结果
             for level in ['exact', 'high_confidence', 'need_review']:
                 for match in results.get(level, []):
@@ -128,9 +164,9 @@ class MatchExecutor:
                     matched_source_indices.add(match['source_idx'])
             
             self._log(f"[执行器] 目标表 {target_file} 匹配完成: "
-                      f"精确{len(results['exact'])}, "
-                      f"高置信{len(results['high_confidence'])}, "
-                      f"需确认{len(results['need_review'])}", "info")
+                      f"精确{target_exact}, "
+                      f"高置信{target_high}, "
+                      f"需确认{target_review}", "info")
         
         # 5. 最终未匹配记录
         final_unmatched_indices = [idx for idx in source_df.index if idx not in matched_source_indices]
@@ -171,8 +207,10 @@ class MatchExecutor:
             "task_name": task_name,
             "results": all_results,
             "statistics": stats,
+            "source_file": source_file,
             "source_df": source_df,
             "total_source": total_source,
+            "target_details": target_details,  # 每个目标表的匹配详情
             "execution_time": execution_time
         }
     
@@ -273,6 +311,14 @@ class MatchExecutor:
         
         source_safe = safe_name(source_name)
         
+        # 收集所有目标表名（用于未匹配时的情况）
+        all_target_files = set()
+        for level, matches in results.items():
+            for m in matches:
+                target_file = m.get('target_file', '')
+                if target_file:
+                    all_target_files.add(target_file)
+        
         # 先删除该源表的旧结果文件
         for f in os.listdir(result_dir):
             if f.startswith(source_safe) and f.endswith('.csv'):
@@ -291,7 +337,10 @@ class MatchExecutor:
         
         saved_files = []
         
-        # 保存每个层级的结果
+        # 获取源表名（去掉扩展名和_标准化后缀）
+        source_name_short = os.path.splitext(source_file)[0].replace("_标准化", "")
+        
+        # 保存每个层级的结果（包含源表+目标表完整数据）
         for level, matches in results.items():
             if not matches:
                 continue
@@ -299,38 +348,100 @@ class MatchExecutor:
             level_name = level_names.get(level, level)
             count = len(matches)
             
-            # 构建 DataFrame
+            # 构建 DataFrame - 包含完整的源表和目标表数据
             rows = []
             for m in matches:
-                source_idx = m.get('source_idx')
-                if source_idx is not None and source_idx in source_df.index:
-                    source_row = source_df.loc[source_idx].to_dict()
+                row = {}
+                
+                # 获取目标表名（去掉扩展名和_标准化后缀）
+                target_file = m.get('target_file', '')
+                if not target_file:
+                    # 如果 target_file 为空，尝试从已收集的目标表中获取
+                    if all_target_files:
+                        # 使用第一个找到的目标表名（通常一个层级只有一个目标表）
+                        target_file = list(all_target_files)[0]
+                    else:
+                        target_file = "未知目标表"
+                
+                target_name_short = os.path.splitext(target_file)[0].replace("_标准化", "") if target_file else "未知表"
+                target_name_short = safe_name(target_name_short)
+                
+                # 1. 源表完整字段（[源:表名]前缀）
+                source_data = m.get('source_row_data', {})
+                for k, v in source_data.items():
+                    row[f'[源:{source_name_short}]{k}'] = v
+                
+                # 2. 匹配依据字段（【匹配源:表名】和【匹配目标:表名】前缀，黄色高亮）
+                # 解析匹配字段信息，提取源表和目标表的匹配字段及值
+                match_field = m.get('match_field', '')
+                source_value = m.get('source_value', '')
+                target_value = m.get('target_value', '')
+                
+                # 解析 match_field 格式：如 "name=housingest" 或 "POI_结构化"
+                if match_field and '=' in match_field:
+                    # 格式：源字段=目标字段
+                    parts = match_field.split('=')
+                    if len(parts) == 2:
+                        source_match_field = parts[0].strip()
+                        target_match_field = parts[1].strip()
+                        if source_match_field and target_match_field:
+                            row[f'【匹配源:{source_name_short}】{source_match_field}'] = source_value
+                            row[f'【匹配目标:{target_name_short}】{target_match_field}'] = target_value
+                        else:
+                            # 字段名为空，使用默认
+                            row[f'【匹配源:{source_name_short}】匹配字段'] = source_value
+                            row[f'【匹配目标:{target_name_short}】匹配字段'] = target_value
+                    else:
+                        # 无法解析，使用通用字段
+                        row[f'【匹配源:{source_name_short}】匹配值'] = source_value
+                        row[f'【匹配目标:{target_name_short}】匹配值'] = target_value
+                elif match_field:
+                    # 单个字段匹配（如 POI_结构化）
+                    match_field_name = match_field.strip()
+                    if match_field_name:
+                        row[f'【匹配源:{source_name_short}】{match_field_name}'] = source_value
+                        row[f'【匹配目标:{target_name_short}】{match_field_name}'] = target_value
+                    else:
+                        row[f'【匹配源:{source_name_short}】匹配字段'] = source_value
+                        row[f'【匹配目标:{target_name_short}】匹配字段'] = target_value
                 else:
-                    source_row = {}
+                    # match_field 为空，使用默认字段名
+                    row[f'【匹配源:{source_name_short}】匹配值'] = source_value
+                    row[f'【匹配目标:{target_name_short}】匹配值'] = target_value
                 
-                row = {
-                    '源表行号': m.get('source_row', ''),
-                    '源表POI': m.get('source_poi', ''),
-                    '源表地址': m.get('source_address', ''),
-                    '匹配层级': level_name,
-                    '匹配类型': m.get('match_type', ''),
-                    '匹配分数': m.get('score', 0),
-                    '匹配字段': m.get('match_field', ''),
-                    '目标表文件': m.get('target_file', ''),
-                    '目标表行号': m.get('target_row', ''),
-                    '目标表POI': m.get('target_poi', ''),
-                    '目标表地址': m.get('target_address', ''),
-                    '区县匹配': m.get('district_match', '')
-                }
+                # 3. 匹配元信息
+                row['匹配分数'] = m.get('score', 0)
+                row['匹配类型'] = m.get('match_type', '')
+                row['匹配层级'] = level_name
                 
-                # 添加源表其他字段
-                for k, v in source_row.items():
-                    if k not in row:
-                        row[f'源_{k}'] = v
+                # 4. 目标表完整字段（[目标:表名]前缀）- 未匹配时为空
+                target_data = m.get('target_row_data', {})
+                if target_data:
+                    row['目标表文件'] = target_file
+                    row['目标表行号'] = m.get('target_row', '')
+                    for k, v in target_data.items():
+                        row[f'[目标:{target_name_short}]{k}'] = v
                 
                 rows.append(row)
             
             df = pd.DataFrame(rows)
+            
+            # 重新排列列顺序：源表 | 匹配依据字段 | 匹配元信息 | 目标表
+            source_cols = [c for c in df.columns if c.startswith('[源:')]
+            match_source_cols = [c for c in df.columns if c.startswith('【匹配源:')]
+            match_target_cols = [c for c in df.columns if c.startswith('【匹配目标:')]
+            match_meta_cols = [c for c in df.columns if c in ['匹配分数', '匹配类型', '匹配层级']]
+            target_cols = [c for c in df.columns if c.startswith('[目标:') or c in ['目标表文件', '目标表行号']]
+            
+            # 列顺序：源表 | 匹配源字段 | 匹配目标字段 | 匹配元信息 | 目标表
+            ordered_cols = source_cols + match_source_cols + match_target_cols + match_meta_cols + target_cols
+            # 添加可能遗漏的列
+            for c in df.columns:
+                if c not in ordered_cols:
+                    ordered_cols.append(c)
+            
+            df = df[[c for c in ordered_cols if c in df.columns]]
+            
             filename = f"{source_safe}_{level_name}_{count}条.csv"
             output_path = os.path.join(result_dir, filename)
             df.to_csv(output_path, index=False, encoding='utf-8-sig')

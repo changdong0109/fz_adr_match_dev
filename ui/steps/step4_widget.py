@@ -178,33 +178,6 @@ class Step4Widget(BaseStepWidget):
         btn_add.clicked.connect(self._add_task_group)
         layout.addWidget(btn_add)
         
-        # 分隔线
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setObjectName("step4_separator")
-        layout.addWidget(line)
-        
-        # 批量操作
-        batch_label = QLabel("批量操作")
-        batch_label.setObjectName("step4_batch_label")
-        layout.addWidget(batch_label)
-        
-        btn_run_all = QPushButton("执行选中")
-        btn_run_all.setObjectName("step4_btn_batch_run")
-        btn_run_all.clicked.connect(self._run_selected_groups)
-        layout.addWidget(btn_run_all)
-        
-        btn_stop_all = QPushButton("全部终止")
-        btn_stop_all.setObjectName("step4_btn_batch_stop")
-        btn_stop_all.clicked.connect(self._stop_all_groups)
-        layout.addWidget(btn_stop_all)
-        
-        btn_export_all = QPushButton("批量导出")
-        btn_export_all.setObjectName("step4_btn_batch_export")
-        btn_export_all.setToolTip("导出所有已完成任务组的匹配结果")
-        btn_export_all.clicked.connect(self._export_all_results)
-        layout.addWidget(btn_export_all)
-        
         return panel
     
     def _build_right_panel(self) -> QWidget:
@@ -242,8 +215,26 @@ class Step4Widget(BaseStepWidget):
         self.combo_src = NoWheelComboBox()
         self.combo_src.setObjectName("step4_combo")
         self.combo_src.setMinimumHeight(32)
+        self.combo_src.currentTextChanged.connect(self._on_source_changed)
         src_row.addWidget(self.combo_src, 1)
         src_layout.addLayout(src_row)
+        
+        # 源表数据统计行
+        stats_row = QHBoxLayout()
+        lbl_stats = QLabel("数据统计:")
+        lbl_stats.setMinimumWidth(70)
+        stats_row.addWidget(lbl_stats)
+        self.lbl_src_stats = QLabel("--")
+        self.lbl_src_stats.setObjectName("step4_src_stats")
+        self.lbl_src_stats.setMinimumHeight(28)
+        stats_row.addWidget(self.lbl_src_stats, 1)
+        btn_refresh_stats = QPushButton("刷新")
+        btn_refresh_stats.setObjectName("step4_btn_refresh_stats")
+        btn_refresh_stats.setMinimumHeight(28)
+        btn_refresh_stats.setMaximumWidth(60)
+        btn_refresh_stats.clicked.connect(self._refresh_source_stats)
+        stats_row.addWidget(btn_refresh_stats)
+        src_layout.addLayout(stats_row)
         
         # 过滤条件行
         filter_row = QHBoxLayout()
@@ -269,7 +260,7 @@ class Step4Widget(BaseStepWidget):
         tgt_layout = QVBoxLayout(tgt_group)
         tgt_layout.setSpacing(10)
         
-        # 目标表表格 - 6列
+        # 目标表表格 - 6列（移除数据质量列）
         self.tgt_table = QTableWidget(0, 6)
         self.tgt_table.setObjectName("step4_target_table")
         self.tgt_table.setHorizontalHeaderLabels([
@@ -303,7 +294,138 @@ class Step4Widget(BaseStepWidget):
         
         config_layout.addWidget(tgt_group, 1)
         
-        # ===== 备注区域 =====
+        # ===== 匹配统计区域（默认隐藏，执行后显示） =====
+        self.stats_group = QGroupBox("匹配统计")
+        self.stats_group.setObjectName("step4_stats_group")
+        self.stats_group.setVisible(False)  # 默认隐藏
+        stats_layout = QVBoxLayout(self.stats_group)
+        stats_layout.setSpacing(6)
+        
+        # ===== 数据质量分析区域 =====
+        quality_group = QGroupBox("数据质量分析")
+        quality_group.setObjectName("step4_quality_group")
+        quality_layout = QVBoxLayout(quality_group)
+        quality_layout.setSpacing(8)
+        quality_layout.setContentsMargins(8, 8, 8, 8)
+        
+        # 源表数据质量（动态更新标签）
+        src_quality_row = QHBoxLayout()
+        src_quality_row.setSpacing(8)
+        self.lbl_src_quality_name = QLabel("源表:")
+        src_quality_row.addWidget(self.lbl_src_quality_name)
+        self.lbl_src_quality = QLabel("--")
+        self.lbl_src_quality.setObjectName("step4_quality_label")
+        src_quality_row.addWidget(self.lbl_src_quality, 1)
+        src_quality_row.addStretch()
+        quality_layout.addLayout(src_quality_row)
+        
+        # 目标表数据质量（动态添加）
+        self.target_quality_container = QWidget()
+        self.target_quality_layout = QVBoxLayout(self.target_quality_container)
+        self.target_quality_layout.setContentsMargins(0, 0, 0, 0)
+        self.target_quality_layout.setSpacing(4)
+        quality_layout.addWidget(self.target_quality_container)
+        
+        stats_layout.addWidget(quality_group)
+        
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        stats_layout.addWidget(line)
+        
+        # 分层统计标签
+        self.lbl_stats_summary = QLabel("等待执行...")
+        self.lbl_stats_summary.setObjectName("step4_stats_summary")
+        self.lbl_stats_summary.setWordWrap(True)
+        stats_layout.addWidget(self.lbl_stats_summary)
+        
+        # 分层统计使用网格布局（2x2）
+        from qgis.PyQt.QtWidgets import QGridLayout
+        layer_container = QWidget()
+        layer_grid = QGridLayout(layer_container)
+        layer_grid.setContentsMargins(0, 4, 0, 4)
+        layer_grid.setSpacing(8)
+        
+        # 精确匹配（绿色）- 左上
+        exact_widget = QWidget()
+        exact_widget.setObjectName("step4_layer_box_green")
+        exact_box = QVBoxLayout(exact_widget)
+        exact_box.setContentsMargins(8, 6, 8, 6)
+        exact_box.setSpacing(2)
+        self.lbl_exact = QLabel("🟢 精确匹配")
+        self.lbl_exact.setObjectName("step4_layer_label")
+        self.lbl_exact_count = QLabel("--")
+        self.lbl_exact_count.setObjectName("step4_layer_count_green")
+        self.lbl_exact_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        exact_box.addWidget(self.lbl_exact)
+        exact_box.addWidget(self.lbl_exact_count)
+        layer_grid.addWidget(exact_widget, 0, 0)
+        
+        # 高置信度（蓝色）- 右上
+        high_widget = QWidget()
+        high_widget.setObjectName("step4_layer_box_blue")
+        high_box = QVBoxLayout(high_widget)
+        high_box.setContentsMargins(8, 6, 8, 6)
+        high_box.setSpacing(2)
+        self.lbl_high = QLabel("🔵 高置信度")
+        self.lbl_high.setObjectName("step4_layer_label")
+        self.lbl_high_count = QLabel("--")
+        self.lbl_high_count.setObjectName("step4_layer_count_blue")
+        self.lbl_high_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        high_box.addWidget(self.lbl_high)
+        high_box.addWidget(self.lbl_high_count)
+        layer_grid.addWidget(high_widget, 0, 1)
+        
+        # 需确认（黄色）- 左下
+        review_widget = QWidget()
+        review_widget.setObjectName("step4_layer_box_yellow")
+        review_box = QVBoxLayout(review_widget)
+        review_box.setContentsMargins(8, 6, 8, 6)
+        review_box.setSpacing(2)
+        self.lbl_review = QLabel("🟡 需人工确认")
+        self.lbl_review.setObjectName("step4_layer_label")
+        self.lbl_review_count = QLabel("--")
+        self.lbl_review_count.setObjectName("step4_layer_count_yellow")
+        self.lbl_review_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        review_box.addWidget(self.lbl_review)
+        review_box.addWidget(self.lbl_review_count)
+        layer_grid.addWidget(review_widget, 1, 0)
+        
+        # 未匹配（灰色）- 右下
+        unmatched_widget = QWidget()
+        unmatched_widget.setObjectName("step4_layer_box_gray")
+        unmatched_box = QVBoxLayout(unmatched_widget)
+        unmatched_box.setContentsMargins(8, 6, 8, 6)
+        unmatched_box.setSpacing(2)
+        self.lbl_unmatched = QLabel("⚪ 未匹配")
+        self.lbl_unmatched.setObjectName("step4_layer_label")
+        self.lbl_unmatched_count = QLabel("--")
+        self.lbl_unmatched_count.setObjectName("step4_layer_count_gray")
+        self.lbl_unmatched_count.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        unmatched_box.addWidget(self.lbl_unmatched)
+        unmatched_box.addWidget(self.lbl_unmatched_count)
+        layer_grid.addWidget(unmatched_widget, 1, 1)
+        
+        stats_layout.addWidget(layer_container)
+        
+        # 进度条
+        self.match_progress = QProgressBar()
+        self.match_progress.setObjectName("step4_match_progress")
+        self.match_progress.setMinimumHeight(20)
+        self.match_progress.setValue(0)
+        self.match_progress.setTextVisible(True)
+        self.match_progress.setFormat("%p%")
+        stats_layout.addWidget(self.match_progress)
+        
+        # 状态标签
+        self.lbl_match_status = QLabel("就绪")
+        self.lbl_match_status.setObjectName("step4_match_status")
+        stats_layout.addWidget(self.lbl_match_status)
+        
+        config_layout.addWidget(self.stats_group)
+        
+        # ===== 备注区域（在操作按钮之前） =====
         remark_row = QHBoxLayout()
         lbl_remark = QLabel("备注:")
         lbl_remark.setMinimumWidth(70)
@@ -314,28 +436,6 @@ class Step4Widget(BaseStepWidget):
         self.txt_remark.setPlaceholderText("输入任务组说明...")
         remark_row.addWidget(self.txt_remark, 1)
         config_layout.addLayout(remark_row)
-        
-        # ===== 执行进度区域 =====
-        progress_group = QGroupBox("执行进度")
-        progress_group.setObjectName("step4_progress_group")
-        progress_layout = QVBoxLayout(progress_group)
-        progress_layout.setSpacing(8)
-        
-        # 进度条
-        self.match_progress = QProgressBar()
-        self.match_progress.setObjectName("step4_match_progress")
-        self.match_progress.setMinimumHeight(24)
-        self.match_progress.setValue(0)
-        self.match_progress.setTextVisible(True)
-        self.match_progress.setFormat("%p%")
-        progress_layout.addWidget(self.match_progress)
-        
-        # 状态标签
-        self.lbl_match_status = QLabel("就绪")
-        self.lbl_match_status.setObjectName("step4_match_status")
-        progress_layout.addWidget(self.lbl_match_status)
-        
-        config_layout.addWidget(progress_group)
         
         # ===== 操作按钮区域 =====
         btn_row = QHBoxLayout()
@@ -500,6 +600,9 @@ class Step4Widget(BaseStepWidget):
         # 更新目标表列表
         self._refresh_target_table(group.get("targets", []))
         
+        # 加载匹配统计（如果有历史数据）
+        self._load_group_stats(group)
+        
         self._log(f"[Step4] 加载任务组配置: {group['name']}", "info")
     
     def _refresh_target_table(self, targets: List[Dict]):
@@ -507,69 +610,7 @@ class Step4Widget(BaseStepWidget):
         self.tgt_table.setRowCount(len(targets))
         
         for r, target in enumerate(targets):
-            # 序号
-            seq_item = QTableWidgetItem(str(r + 1))
-            seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            seq_item.setFlags(seq_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.tgt_table.setItem(r, 0, seq_item)
-            
-            # 目标表（下拉框）
-            combo = NoWheelComboBox()
-            combo.setEditable(False)
-            combo.addItems(self._available_files)
-            tgt_table_name = target.get("table", "")
-            if tgt_table_name and tgt_table_name in self._available_files:
-                combo.setCurrentText(tgt_table_name)
-            self.tgt_table.setCellWidget(r, 1, combo)
-            
-            # 过滤条件按钮
-            filter_cond = target.get("filter", "")
-            btn_filter = QPushButton("已设置" if filter_cond else "设置")
-            btn_filter.setObjectName("step4_btn_set" if not filter_cond else "step4_btn_done")
-            if filter_cond:
-                btn_filter.setToolTip(filter_cond)
-            btn_filter.clicked.connect(lambda checked, row=r: self._open_target_filter(row))
-            self.tgt_table.setCellWidget(r, 2, btn_filter)
-            
-            # 匹配字段按钮
-            match_fields = target.get("match_fields", "")
-            btn_match = QPushButton(match_fields if match_fields else "设置")
-            btn_match.setObjectName("step4_btn_set" if not match_fields else "step4_btn_done")
-            btn_match.clicked.connect(lambda checked, row=r: self._open_target_match(row))
-            self.tgt_table.setCellWidget(r, 3, btn_match)
-            
-            # 匹配方式说明
-            desc = target.get("match_desc", "")
-            desc_item = QTableWidgetItem(desc)
-            desc_item.setForeground(QColor("#6b7280"))
-            desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.tgt_table.setItem(r, 4, desc_item)
-            
-            # 操作按钮
-            op_widget = QWidget()
-            op_layout = QHBoxLayout(op_widget)
-            op_layout.setContentsMargins(2, 2, 2, 2)
-            op_layout.setSpacing(4)
-            
-            btn_up = QPushButton("上")
-            btn_up.setObjectName("step4_btn_op")
-            btn_up.setFixedWidth(28)
-            btn_up.clicked.connect(lambda checked, row=r: self._move_target(row, -1))
-            op_layout.addWidget(btn_up)
-            
-            btn_down = QPushButton("下")
-            btn_down.setObjectName("step4_btn_op")
-            btn_down.setFixedWidth(28)
-            btn_down.clicked.connect(lambda checked, row=r: self._move_target(row, 1))
-            op_layout.addWidget(btn_down)
-            
-            btn_del = QPushButton("删")
-            btn_del.setObjectName("step4_btn_del")
-            btn_del.setFixedWidth(28)
-            btn_del.clicked.connect(lambda checked, row=r: self._delete_target(row))
-            op_layout.addWidget(btn_del)
-            
-            self.tgt_table.setCellWidget(r, 5, op_widget)
+            self._add_target_table_row(r, target)
     
     def _add_task_group(self):
         """新增任务组"""
@@ -592,26 +633,119 @@ class Step4Widget(BaseStepWidget):
         self._log(f"[Step4] 新增任务组: {new_group['name']}", "info")
     
     def _add_target_row(self):
-        """新增目标表"""
+        """新增目标表 - 只添加一行，不刷新整个表格"""
         if self._current_group_idx < 0:
             return
         
+        # 先保存当前表格中的选择到 targets
+        self._sync_targets_from_table()
+        
         group = self._task_groups[self._current_group_idx]
-        group["targets"].append({
+        new_target = {
             "table": "",
             "filter": "",
             "match_fields": "",
             "match_desc": ""
-        })
-        self._refresh_target_table(group["targets"])
+        }
+        group["targets"].append(new_target)
+        
+        # 只添加新行
+        r = self.tgt_table.rowCount()
+        self.tgt_table.setRowCount(r + 1)
+        self._add_target_table_row(r, new_target)
+        
         self._log("[Step4] 新增目标表", "info")
+    
+    def _sync_targets_from_table(self):
+        """从表格同步目标表选择到数据"""
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        targets = group.get("targets", [])
+        
+        for r in range(min(self.tgt_table.rowCount(), len(targets))):
+            combo = self.tgt_table.cellWidget(r, 1)
+            if combo:
+                targets[r]["table"] = combo.currentText()
+    
+    def _add_target_table_row(self, r: int, target: Dict):
+        """添加单行目标表到表格"""
+        # 序号
+        seq_item = QTableWidgetItem(str(r + 1))
+        seq_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        seq_item.setFlags(seq_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.tgt_table.setItem(r, 0, seq_item)
+        
+        # 目标表（下拉框）
+        combo = NoWheelComboBox()
+        combo.setEditable(False)
+        combo.addItem("")  # 添加空选项
+        combo.addItems(self._available_files)
+        tgt_table_name = target.get("table", "")
+        if tgt_table_name:
+            combo.setCurrentText(tgt_table_name)
+        else:
+            combo.setCurrentIndex(0)  # 选择空选项
+        # 下拉框变化时更新数据质量
+        combo.currentTextChanged.connect(lambda text, row=r: self._update_target_quality_display())
+        self.tgt_table.setCellWidget(r, 1, combo)
+        
+        # 过滤条件按钮
+        filter_cond = target.get("filter", "")
+        btn_filter = QPushButton("已设置" if filter_cond else "设置")
+        btn_filter.setObjectName("step4_btn_set" if not filter_cond else "step4_btn_done")
+        if filter_cond:
+            btn_filter.setToolTip(filter_cond)
+        btn_filter.clicked.connect(lambda checked, row=r: self._open_target_filter(row))
+        self.tgt_table.setCellWidget(r, 2, btn_filter)
+        
+        # 匹配字段按钮
+        match_fields = target.get("match_fields", "")
+        btn_match = QPushButton(match_fields if match_fields else "设置")
+        btn_match.setObjectName("step4_btn_set" if not match_fields else "step4_btn_done")
+        btn_match.clicked.connect(lambda checked, row=r: self._open_target_match(row))
+        self.tgt_table.setCellWidget(r, 3, btn_match)
+        
+        # 匹配方式说明
+        desc = target.get("match_desc", "")
+        desc_item = QTableWidgetItem(desc)
+        desc_item.setForeground(QColor("#6b7280"))
+        desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self.tgt_table.setItem(r, 4, desc_item)
+        
+        # 操作按钮
+        op_widget = QWidget()
+        op_layout = QHBoxLayout(op_widget)
+        op_layout.setContentsMargins(2, 2, 2, 2)
+        op_layout.setSpacing(4)
+        
+        btn_up = QPushButton("上")
+        btn_up.setObjectName("step4_btn_op")
+        btn_up.setFixedWidth(28)
+        btn_up.clicked.connect(lambda checked, row=r: self._move_target(row, -1))
+        op_layout.addWidget(btn_up)
+        
+        btn_down = QPushButton("下")
+        btn_down.setObjectName("step4_btn_op")
+        btn_down.setFixedWidth(28)
+        btn_down.clicked.connect(lambda checked, row=r: self._move_target(row, 1))
+        op_layout.addWidget(btn_down)
+        
+        btn_del = QPushButton("删")
+        btn_del.setObjectName("step4_btn_del")
+        btn_del.setFixedWidth(28)
+        btn_del.clicked.connect(lambda checked, row=r: self._delete_target(row))
+        op_layout.addWidget(btn_del)
+        
+        self.tgt_table.setCellWidget(r, 5, op_widget)
     
     def _move_target(self, row: int, direction: int):
         """移动目标表"""
         if self._current_group_idx < 0:
             return
         
-        # 查找实际行号
+        # 查找实际行号（操作列索引为5）
         sender = self.sender()
         if sender:
             for r in range(self.tgt_table.rowCount()):
@@ -619,6 +753,9 @@ class Step4Widget(BaseStepWidget):
                 if widget and sender in widget.findChildren(QPushButton):
                     row = r
                     break
+        
+        # 先同步表格中的选择到数据
+        self._sync_targets_from_table()
         
         group = self._task_groups[self._current_group_idx]
         targets = group["targets"]
@@ -634,7 +771,7 @@ class Step4Widget(BaseStepWidget):
         if self._current_group_idx < 0:
             return
         
-        # 查找实际行号
+        # 查找实际行号（操作列索引为5）
         sender = self.sender()
         if sender:
             for r in range(self.tgt_table.rowCount()):
@@ -642,6 +779,9 @@ class Step4Widget(BaseStepWidget):
                 if widget and sender in widget.findChildren(QPushButton):
                     row = r
                     break
+        
+        # 先同步表格中的选择到数据
+        self._sync_targets_from_table()
         
         group = self._task_groups[self._current_group_idx]
         if 0 <= row < len(group["targets"]):
@@ -679,7 +819,7 @@ class Step4Widget(BaseStepWidget):
                 # 使用前缀区分目标表的条件
                 filter_key = f"[目标表{row+1}]{tgt_name}"
                 condition = self.open_filter_modal(filter_key)
-                # 更新按钮文字
+                # 更新按钮文字（过滤条件列索引为2）
                 btn_filter = self.tgt_table.cellWidget(row, 2)
                 if btn_filter and isinstance(btn_filter, QPushButton):
                     btn_filter.setText("已设置" if condition else "设置")
@@ -719,7 +859,7 @@ class Step4Widget(BaseStepWidget):
         # 调用并获取返回值
         summary = self.open_match_modal(src_key, tgt_key)
         
-        # 更新按钮状态
+        # 更新按钮状态（匹配字段列索引为3）
         btn_match = self.tgt_table.cellWidget(row, 3)
         if btn_match:
             if summary:
@@ -746,30 +886,309 @@ class Step4Widget(BaseStepWidget):
         group["source"] = self.combo_src.currentText()
         group["remark"] = self.txt_remark.text()
         
-        # 更新目标表
-        targets = []
+        # 更新目标表，保留已有的 filter 和 match_fields
+        old_targets = group.get("targets", [])
+        new_targets = []
         for r in range(self.tgt_table.rowCount()):
             combo = self.tgt_table.cellWidget(r, 1)
-            desc_item = self.tgt_table.item(r, 4)
+            desc_item = self.tgt_table.item(r, 5)
             if combo:
-                targets.append({
+                # 尝试从旧数据中获取 filter 和 match_fields
+                old_filter = ""
+                old_match_fields = ""
+                if r < len(old_targets):
+                    old_filter = old_targets[r].get("filter", "")
+                    old_match_fields = old_targets[r].get("match_fields", "")
+                
+                new_targets.append({
                     "table": combo.currentText(),
-                    "filter": "",
-                    "match_fields": "",
+                    "filter": old_filter,
+                    "match_fields": old_match_fields,
                     "match_desc": desc_item.text() if desc_item else ""
                 })
-        group["targets"] = targets
+        group["targets"] = new_targets
         group["status"] = "待执行"
         
         self._persist_tasks()  # 持久化
         self._refresh_task_list()
         self._log(f"[Step4] 保存任务组配置: {group['name']}", "info")
     
+    # ===== 数据统计方法 =====
+    
+    def _on_source_changed(self, filename: str):
+        """源表选择变化时更新统计并同步到任务组"""
+        # 同步到当前任务组配置
+        if self._current_group_idx >= 0:
+            self._task_groups[self._current_group_idx]["source"] = filename
+        
+        if not filename:
+            self.lbl_src_stats.setText("--")
+            self._update_source_quality_display()
+            return
+        self._refresh_source_stats()
+        self._update_source_quality_display()
+    
+    def _refresh_source_stats(self):
+        """刷新源表数据统计"""
+        filename = self.combo_src.currentText()
+        if not filename:
+            self.lbl_src_stats.setText("--")
+            return
+        
+        stats = self._get_file_stats(filename)
+        if stats:
+            total = stats.get('total', 0)
+            poi_rate = stats.get('poi_rate', 0)
+            district_rate = stats.get('district_rate', 0)
+            self.lbl_src_stats.setText(
+                f"📊 {total}条 | POI: {poi_rate:.0%} | 区县: {district_rate:.0%}"
+            )
+        else:
+            self.lbl_src_stats.setText("--")
+    
+    def _get_file_stats(self, filename: str) -> Optional[Dict]:
+        """获取文件统计信息"""
+        import pandas as pd
+        
+        if not filename:
+            return None
+        
+        filepath = self._file_paths.get(filename, '')
+        if not filepath or not os.path.exists(filepath):
+            return None
+        
+        try:
+            df = pd.read_csv(filepath, encoding='utf-8-sig', nrows=10000)  # 限制读取行数
+            total = len(df)
+            
+            # POI_结构化非空率
+            poi_col = 'POI_结构化'
+            if poi_col in df.columns:
+                poi_count = df[poi_col].notna().sum()
+                poi_non_empty = df[poi_col].apply(lambda x: bool(str(x).strip()) if pd.notna(x) else False).sum()
+                poi_rate = poi_non_empty / total if total > 0 else 0
+            else:
+                poi_rate = 0
+            
+            # 区县覆盖率
+            district_col = '区县'
+            if district_col in df.columns:
+                district_non_empty = df[district_col].apply(lambda x: bool(str(x).strip()) if pd.notna(x) else False).sum()
+                district_rate = district_non_empty / total if total > 0 else 0
+            else:
+                district_rate = 0
+            
+            return {
+                'total': total,
+                'poi_rate': poi_rate,
+                'district_rate': district_rate
+            }
+        except Exception as e:
+            self._log(f"[Step4] 读取文件统计失败: {e}", "warning")
+            return None
+    
+    def _get_file_quality_text(self, filename: str) -> str:
+        """获取文件质量简短文本（用于目标表列表）"""
+        stats = self._get_file_stats(filename)
+        if stats:
+            total = stats.get('total', 0)
+            poi_rate = stats.get('poi_rate', 0)
+            return f"{total}条 {poi_rate:.0%}"
+        return "--"
+    
+    def _update_target_quality_display(self):
+        """更新所有目标表的匹配结果显示（在匹配统计区域）- 从匹配结果读取"""
+        if not self.stats_group.isVisible():
+            return
+        
+        # 清空现有目标表质量显示（包括布局项）
+        while self.target_quality_layout.count():
+            item = self.target_quality_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                # 清理布局中的控件
+                layout = item.layout()
+                while layout.count():
+                    layout_item = layout.takeAt(0)
+                    if layout_item.widget():
+                        layout_item.widget().deleteLater()
+                layout.deleteLater()
+        
+        # 从缓存数据读取目标表和匹配结果
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        targets = group.get("targets", [])
+        target_details = group.get("target_details", [])
+        
+        if not targets:
+            return
+        
+        # 创建目标表名称到匹配详情的映射（用于快速查找）
+        details_map = {}
+        for detail in target_details:
+            table_name = detail.get("table", "")
+            if table_name:
+                # 标准化为文件名（去掉路径，转为小写用于匹配）
+                normalized = os.path.basename(table_name) if os.path.sep in table_name else table_name
+                details_map[normalized.lower()] = detail
+        
+        # 按照targets的顺序显示（保持用户配置的优先级顺序）
+        for target in targets:
+            tgt_name = target.get("table", "")
+            if not tgt_name:
+                continue
+            
+            # 标准化文件名用于查找
+            tgt_normalized = os.path.basename(tgt_name) if os.path.sep in tgt_name else tgt_name
+            
+            # 从target_details中查找匹配结果
+            detail = details_map.get(tgt_normalized.lower(), None)
+            
+            # 显示文件名：优先使用target_details中的（准确），否则使用targets中的
+            if detail and detail.get("table"):
+                tgt_display_name = os.path.basename(detail.get("table")) if os.path.sep in detail.get("table") else detail.get("table")
+            else:
+                tgt_display_name = tgt_normalized
+            
+            # 读取匹配结果
+            if detail:
+                # 有匹配结果，显示匹配数量
+                matched = detail.get("matched", 0)
+                exact = detail.get("exact", 0)
+                high_conf = detail.get("high_confidence", 0)
+                need_review = detail.get("need_review", 0)
+                
+                # 格式化显示：匹配了X条（精确Y条，高置信Z条，需确认W条）
+                match_text = f"匹配了{matched}条"
+                if exact > 0 or high_conf > 0 or need_review > 0:
+                    parts = []
+                    if exact > 0:
+                        parts.append(f"精确{exact}条")
+                    if high_conf > 0:
+                        parts.append(f"高置信{high_conf}条")
+                    if need_review > 0:
+                        parts.append(f"需确认{need_review}条")
+                    if parts:
+                        match_text += f"（{', '.join(parts)}）"
+            else:
+                # 没有匹配结果（未执行或执行失败）
+                match_text = "未执行"
+            
+            quality_row = QHBoxLayout()
+            quality_row.setSpacing(8)
+            
+            # 文件名标签（设置最小宽度，防止被压缩）
+            name_label = QLabel(f"{tgt_display_name}:")
+            name_label.setMinimumWidth(120)  # 确保文件名有足够显示空间
+            name_label.setWordWrap(False)  # 不换行，完整显示
+            quality_row.addWidget(name_label)
+            
+            # 匹配结果标签（可拉伸）
+            quality_label = QLabel(match_text)
+            quality_label.setObjectName("step4_quality_label")
+            quality_label.setWordWrap(True)  # 允许换行，避免过长
+            quality_row.addWidget(quality_label, 1)
+            quality_row.addStretch()
+            self.target_quality_layout.addLayout(quality_row)
+    
+    def _update_source_quality_display(self):
+        """更新源表质量显示"""
+        if not self.stats_group.isVisible():
+            return
+        
+        source_file = self.combo_src.currentText()
+        if source_file:
+            # 显示完整文件名（包括后缀），只去掉路径
+            source_display_name = os.path.basename(source_file) if os.path.sep in source_file else source_file
+            self.lbl_src_quality_name.setText(f"{source_display_name}:")
+            
+            stats = self._get_file_stats(source_file)
+            if stats:
+                total = stats.get('total', 0)
+                poi_rate = stats.get('poi_rate', 0)
+                district_rate = stats.get('district_rate', 0)
+                self.lbl_src_quality.setText(
+                    f"📊 {total}条 | POI: {poi_rate:.0%} | 区县: {district_rate:.0%}"
+                )
+            else:
+                self.lbl_src_quality.setText("--")
+        else:
+            self.lbl_src_quality_name.setText("源表:")
+            self.lbl_src_quality.setText("--")
+    
+    def _load_group_stats(self, group: Dict):
+        """加载任务组的匹配统计"""
+        stats = group.get('match_stats', None)
+        target_details = group.get('target_details', None)
+        status = group.get('status', '')
+        
+        if stats and status == '已完成':
+            # 有历史统计数据，显示匹配统计区域
+            self.stats_group.setVisible(True)
+            self._update_match_stats_display(stats, target_details)
+            self._update_source_quality_display()
+            self._update_target_quality_display()
+            self.match_progress.setValue(100)
+            self.lbl_match_status.setText(f"✅ 已完成")
+        else:
+            # 没有统计数据或未执行，隐藏匹配统计区域
+            self.stats_group.setVisible(False)
+            self._reset_match_stats_display()
+            self.match_progress.setValue(0)
+            if status == '执行中':
+                self.stats_group.setVisible(True)  # 执行中也显示
+                self._update_source_quality_display()
+                self._update_target_quality_display()
+                self.lbl_match_status.setText("⏳ 执行中...")
+            elif status == '失败':
+                self.stats_group.setVisible(True)  # 失败也显示
+                self._update_source_quality_display()
+                self._update_target_quality_display()
+                self.lbl_match_status.setText("❌ 执行失败")
+            else:
+                self.lbl_match_status.setText("就绪")
+    
+    def _update_match_stats_display(self, stats: Dict, target_details: List[Dict] = None):
+        """更新匹配统计显示"""
+        total = stats.get('total', 0)
+        exact = stats.get('exact', 0)
+        high_conf = stats.get('high_confidence', 0)
+        need_review = stats.get('need_review', 0)
+        unmatched = stats.get('unmatched', 0)
+        auto_rate = stats.get('auto_match_rate', 0)
+        
+        # 更新汇总（添加目标表信息）
+        target_info = ""
+        if target_details:
+            target_count = len(target_details)
+            total_matched = sum(d.get('matched', 0) for d in target_details)
+            target_info = f" | {target_count}个目标表命中{total_matched}条"
+        
+        self.lbl_stats_summary.setText(
+            f"共 {total} 条 | 自动匹配率: {auto_rate:.1f}%{target_info}"
+        )
+        
+        # 更新分层数量
+        self.lbl_exact_count.setText(f"{exact}")
+        self.lbl_high_count.setText(f"{high_conf}")
+        self.lbl_review_count.setText(f"{need_review}")
+        self.lbl_unmatched_count.setText(f"{unmatched}")
+    
+    def _reset_match_stats_display(self):
+        """重置匹配统计显示"""
+        self.lbl_stats_summary.setText("等待执行...")
+        self.lbl_exact_count.setText("--")
+        self.lbl_high_count.setText("--")
+        self.lbl_review_count.setText("--")
+        self.lbl_unmatched_count.setText("--")
+    
     def _run_current_group(self):
-        """执行当前任务组 - 弹出进度对话框，后台线程执行"""
+        """执行当前任务组 - 后台线程执行，进度显示在匹配统计区域"""
         from ..workers.match_worker import MatchWorker
         from ..widgets.result_dialog import ResultDialog
-        from ..widgets.progress_dialog import ProgressDialog
         
         # 检查是否已有任务在运行
         if hasattr(self, '_match_worker') and self._match_worker is not None and self._match_worker.isRunning():
@@ -803,20 +1222,13 @@ class Step4Widget(BaseStepWidget):
         group["progress"] = 0
         self._refresh_task_list()
         
-        # 更新面板进度条
+        # 显示匹配统计区域并更新面板进度条
+        self.stats_group.setVisible(True)
         self.match_progress.setValue(0)
         self.match_progress.setMaximum(100)
         self.lbl_match_status.setText("执行中...")
         
         self._log(f"[Step4] 开始后台执行任务组: {group['name']}", "info")
-        
-        # === 创建进度对话框（参考 Step3 导出模式）===
-        self._progress_dialog = ProgressDialog(
-            self,
-            f"执行匹配任务: {group['name']}",
-            "正在初始化...",
-            cancelable=True
-        )
         
         try:
             # 创建 Worker（Worker 内部会创建 Executor 并传递回调）
@@ -827,21 +1239,15 @@ class Step4Widget(BaseStepWidget):
                 parent=self
             )
             
-            # 连接信号到进度对话框
+            # 连接信号（只更新匹配统计区域的进度条，不显示弹出对话框）
             self._match_worker.progress.connect(self._on_progress_update)
             self._match_worker.log.connect(self._log)
             self._match_worker.group_completed.connect(self._on_group_completed)
             self._match_worker.finished.connect(self._on_match_finished)
             self._match_worker.error.connect(self._on_match_error)
             
-            # 取消按钮
-            self._progress_dialog.on_cancel = self._match_worker.cancel
-            
-            # 启动 Worker
+            # 启动 Worker（非阻塞，后台执行）
             self._match_worker.start()
-            
-            # 显示模态进度对话框（阻塞直到完成）
-            self._progress_dialog.exec()
             
         except Exception as e:
             group["status"] = "失败"
@@ -849,11 +1255,9 @@ class Step4Widget(BaseStepWidget):
             self._persist_tasks()
             self._refresh_task_list()
             self.lbl_match_status.setText(f"失败：{str(e)[:50]}")
-            if hasattr(self, '_progress_dialog') and self._progress_dialog:
-                self._progress_dialog.close()
     
     def _on_progress_update(self, current: int, total: int, message: str):
-        """进度更新回调 - 同时更新对话框和面板
+        """进度更新回调 - 只更新匹配统计区域的进度条
         
         现在 current/total 直接是百分比形式（0-100, 100）
         """
@@ -865,11 +1269,7 @@ class Step4Widget(BaseStepWidget):
         else:
             percent = 0
         
-        # 更新进度对话框
-        if hasattr(self, '_progress_dialog') and self._progress_dialog:
-            self._progress_dialog.set_progress(percent, message)
-        
-        # 更新面板进度条
+        # 更新匹配统计区域的进度条和状态
         self.match_progress.setMaximum(100)
         self.match_progress.setValue(percent)
         self.lbl_match_status.setText(message)
@@ -887,26 +1287,29 @@ class Step4Widget(BaseStepWidget):
                 if result.get('success'):
                     group["status"] = "已完成"
                     group["progress"] = 100
+                    # 保存统计数据和目标详情
+                    stats = result.get('statistics', {})
+                    target_details = result.get('target_details', [])
+                    if stats:
+                        group['match_stats'] = stats
+                    if target_details:
+                        group['target_details'] = target_details
                 else:
                     group["status"] = "失败"
                 break
         self._refresh_task_list()
     
     def _on_match_finished(self, summary: dict):
-        """匹配任务完成 - 关闭进度对话框并显示结果"""
+        """匹配任务完成 - 显示结果"""
         self._match_worker = None
         self._persist_tasks()
         self._refresh_task_list()
-        
-        # === 关闭进度对话框 ===
-        if hasattr(self, '_progress_dialog') and self._progress_dialog:
-            self._progress_dialog.close()
-            self._progress_dialog = None
         
         if summary.get('cancelled'):
             self._log("[Step4] 匹配任务已取消", "warning")
             self.lbl_match_status.setText("已取消")
             self.match_progress.setValue(0)
+            self._reset_match_stats_display()
             return
         
         # 更新进度条和状态
@@ -921,21 +1324,30 @@ class Step4Widget(BaseStepWidget):
         else:
             self.lbl_match_status.setText(f"⚠️ 完成：成功{success_count}个，失败{fail_count}个")
         
-        # 显示分层结果弹窗
+        # 更新分层统计显示并保存到任务组
         results = summary.get('results', [])
         if results and results[0].get('success'):
+            # 保存统计数据到当前任务组（先保存，确保数据是最新的）
+            if self._current_group_idx >= 0:
+                stats = results[0].get('statistics', {})
+                target_details = results[0].get('target_details', [])
+                self._task_groups[self._current_group_idx]['match_stats'] = stats
+                self._task_groups[self._current_group_idx]['target_details'] = target_details
+                self._task_groups[self._current_group_idx]['status'] = '已完成'
+                self._persist_tasks()  # 持久化
+                
+                # 重新加载当前任务组的统计数据（确保UI显示最新数据）
+                current_group = self._task_groups[self._current_group_idx]
+                self._load_group_stats(current_group)
+            
+            # 显示分层结果弹窗
             self._show_match_result_dialog(results[0], summary)
     
     def _on_match_error(self, error_msg: str):
-        """匹配任务出错 - 关闭进度对话框并显示错误"""
+        """匹配任务出错 - 显示错误"""
         from ..widgets.result_dialog import ResultDialog
         
         self._match_worker = None
-        
-        # === 关闭进度对话框 ===
-        if hasattr(self, '_progress_dialog') and self._progress_dialog:
-            self._progress_dialog.close()
-            self._progress_dialog = None
         
         self.lbl_match_status.setText(f"❌ 出错：{error_msg[:50]}")
         self.match_progress.setValue(0)
@@ -952,8 +1364,12 @@ class Step4Widget(BaseStepWidget):
         self._log(f"[Step4] 匹配出错: {error_msg}", "error")
     
     def _show_match_result_dialog(self, result: Dict, summary: Dict = None):
-        """显示分层匹配结果对话框"""
-        from qgis.PyQt.QtWidgets import QMessageBox
+        """显示分层匹配结果对话框 - 使用可滚动的自定义对话框"""
+        from qgis.PyQt.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+            QScrollArea, QWidget, QPushButton, QFrame
+        )
+        from qgis.PyQt.QtCore import Qt
         
         # 获取统计数据
         stats = result.get('statistics', {})
@@ -964,48 +1380,169 @@ class Step4Widget(BaseStepWidget):
         unmatched = stats.get('unmatched', 0)
         auto_match_rate = stats.get('auto_match_rate', 0)
         
-        msg = f"""🎯 匹配任务完成！
-
-📋 任务名称: {result.get('task_name', '')}
-⏱️ 执行时间: {result.get('execution_time', '')}
-
-📊 分层匹配结果 (共 {total} 条)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🟢 精确匹配: {exact} 条  ({stats.get('exact_rate', 0):.1f}%)
-   - 核心字段完全相等 / POI结构化相等
-   - 无需人工确认
-
-🔵 高置信度: {high_conf} 条  ({stats.get('high_confidence_rate', 0):.1f}%)
-   - 区县约束 + 模糊匹配 ≥95%
-   - 无需人工确认
-
-🟡 需人工确认: {need_review} 条  ({stats.get('need_review_rate', 0):.1f}%)
-   - 模糊匹配 88-95%
-   - 建议人工核实
-
-⚪ 未匹配: {unmatched} 条  ({100 - stats.get('match_rate', 0):.1f}%)
-   - 无匹配结果
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-✨ 自动匹配率: {auto_match_rate:.1f}%（无需人工确认）
-
-💾 结果已保存到缓存目录的 match_results 文件夹：
-   - {{源表}}_精确匹配_{{N}}条.csv
-   - {{源表}}_高置信度_{{N}}条.csv
-   - {{源表}}_需人工确认_{{N}}条.csv
-   - {{源表}}_未匹配_{{N}}条.csv"""
+        # 获取目标表详情
+        source_file = result.get('source_file', '未知')
+        target_details = result.get('target_details', [])
         
-        QMessageBox.information(self, "匹配完成", msg)
+        # 创建对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("匹配完成")
+        dialog.setMinimumSize(520, 500)
+        dialog.resize(560, 620)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        
+        # ===== 标题 =====
+        title = QLabel("🎯 匹配任务完成！")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #2563eb;")
+        layout.addWidget(title)
+        
+        # ===== 任务信息 =====
+        info_text = f"""📋 任务: {result.get('task_name', '')}
+⏱️ 耗时: {result.get('execution_time', '')}
+📁 源表: {source_file} ({total} 条)"""
+        info_label = QLabel(info_text)
+        info_label.setStyleSheet("color: #374151; line-height: 1.6;")
+        layout.addWidget(info_label)
+        
+        # ===== 滚动区域 =====
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(12)
+        scroll_layout.setContentsMargins(0, 0, 8, 0)
+        
+        # ===== 分层匹配结果 =====
+        layer_title = QLabel("📊 分层匹配结果")
+        layer_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #1f2937; margin-top: 8px;")
+        scroll_layout.addWidget(layer_title)
+        
+        # 精确匹配
+        exact_box = self._create_layer_info_box(
+            "🟢 精确匹配", exact, stats.get('exact_rate', 0),
+            "核心字段完全相等 / POI结构化相等", "#10b981", "#ecfdf5"
+        )
+        scroll_layout.addWidget(exact_box)
+        
+        # 高置信度
+        high_box = self._create_layer_info_box(
+            "🔵 高置信度", high_conf, stats.get('high_confidence_rate', 0),
+            "区县约束 + 模糊匹配 ≥95%", "#3b82f6", "#eff6ff"
+        )
+        scroll_layout.addWidget(high_box)
+        
+        # 需人工确认
+        review_box = self._create_layer_info_box(
+            "🟡 需人工确认", need_review, stats.get('need_review_rate', 0),
+            "模糊匹配 88-95%，建议人工核实", "#f59e0b", "#fffbeb"
+        )
+        scroll_layout.addWidget(review_box)
+        
+        # 未匹配
+        unmatched_box = self._create_layer_info_box(
+            "⚪ 未匹配", unmatched, 100 - stats.get('match_rate', 0),
+            "无匹配结果", "#6b7280", "#f9fafb"
+        )
+        scroll_layout.addWidget(unmatched_box)
+        
+        # ===== 目标表匹配详情 =====
+        if target_details:
+            target_title = QLabel("📋 各目标表匹配详情")
+            target_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #1f2937; margin-top: 12px;")
+            scroll_layout.addWidget(target_title)
+            
+            for i, detail in enumerate(target_details, 1):
+                table_name = detail.get('table', '未知')
+                # 截断长名称
+                display_name = table_name[:25] + '...' if len(table_name) > 28 else table_name
+                target_total = detail.get('total', 0)
+                matched = detail.get('matched', 0)
+                t_exact = detail.get('exact', 0)
+                t_high = detail.get('high_confidence', 0)
+                t_review = detail.get('need_review', 0)
+                status = detail.get('status', '')
+                
+                detail_text = f"""<b>目标表{i}:</b> {display_name}
+<span style="color: #6b7280;">目标表记录: {target_total}条 | 匹配到: {matched}条</span>
+<span style="color: #10b981;">精确: {t_exact}</span> | <span style="color: #3b82f6;">高置信: {t_high}</span> | <span style="color: #f59e0b;">需确认: {t_review}</span>"""
+                
+                detail_label = QLabel(detail_text)
+                detail_label.setWordWrap(True)
+                detail_label.setStyleSheet("""
+                    background: #f8fafc; 
+                    border: 1px solid #e2e8f0; 
+                    border-radius: 6px; 
+                    padding: 8px 12px;
+                    line-height: 1.5;
+                """)
+                scroll_layout.addWidget(detail_label)
+        
+        # ===== 自动匹配率 =====
+        rate_label = QLabel(f"✨ 自动匹配率: <b>{auto_match_rate:.1f}%</b>（无需人工确认）")
+        rate_label.setStyleSheet("font-size: 14px; color: #059669; margin-top: 8px;")
+        scroll_layout.addWidget(rate_label)
+        
+        # ===== 保存提示 =====
+        save_label = QLabel(f"""💾 结果已保存到缓存目录的 <b>match_results</b> 文件夹""")
+        save_label.setStyleSheet("color: #6b7280; margin-top: 4px;")
+        scroll_layout.addWidget(save_label)
+        
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll, 1)
+        
+        # ===== 确定按钮 =====
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_ok = QPushButton("确定")
+        btn_ok.setMinimumWidth(100)
+        btn_ok.setStyleSheet("""
+            QPushButton {
+                background: #2563eb;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 24px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background: #1d4ed8; }
+        """)
+        btn_ok.clicked.connect(dialog.accept)
+        btn_layout.addWidget(btn_ok)
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
+    
+    def _create_layer_info_box(self, title: str, count: int, rate: float, 
+                                desc: str, color: str, bg_color: str) -> QLabel:
+        """创建分层信息框"""
+        text = f"""<b style="color: {color};">{title}: {count} 条 ({rate:.1f}%)</b>
+<span style="color: #6b7280; font-size: 12px;">{desc}</span>"""
+        
+        label = QLabel(text)
+        label.setWordWrap(True)
+        label.setStyleSheet(f"""
+            background: {bg_color};
+            border-left: 4px solid {color};
+            border-radius: 4px;
+            padding: 8px 12px;
+            line-height: 1.5;
+        """)
+        return label
     
     def _export_current_group_results(self):
-        """导出当前任务组的匹配结果
-        
-        缓存中只保留最新结果，文件命名格式：
-        - 匹配结果: {源表}_vs_{目标表}_匹配{N}条.csv
-        - 未匹配: {源表}_未匹配{M}条.csv
-        """
-        from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
-        import shutil
+        """导出当前任务组的匹配结果 - 弹出选择对话框"""
+        from qgis.PyQt.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
+            QRadioButton, QButtonGroup, QPushButton, QFileDialog, QMessageBox,
+            QGroupBox
+        )
         
         if self._current_group_idx < 0:
             return
@@ -1013,6 +1550,7 @@ class Step4Widget(BaseStepWidget):
         group = self._task_groups[self._current_group_idx]
         task_name = group.get("name", "未命名任务")
         source_file = group.get("source", "")
+        stats = group.get("match_stats", {})
         
         # 检查是否有执行结果
         if group.get("status") != "已完成":
@@ -1021,117 +1559,6 @@ class Step4Widget(BaseStepWidget):
         
         if not source_file:
             QMessageBox.warning(self, "配置错误", "任务组未配置源表")
-            return
-        
-        # 获取缓存目录中的结果文件
-        global_config = self._get_global_config()
-        if not global_config:
-            QMessageBox.warning(self, "配置错误", "无法获取全局配置")
-            return
-        
-        region_info = global_config.get_region_info()
-        cache_folder = region_info.get('cache_folder', '')
-        result_dir = os.path.join(cache_folder, "match_results")
-        
-        if not os.path.exists(result_dir):
-            QMessageBox.warning(self, "无结果", "匹配结果目录不存在，请先执行任务")
-            return
-        
-        # 源表名（去掉扩展名和"_标准化"后缀，与保存时一致）
-        source_name = os.path.splitext(source_file)[0].replace("_标准化", "")
-        source_name = source_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
-        
-        # 收集该源表的结果文件
-        result_files = []
-        for f in os.listdir(result_dir):
-            if f.startswith(source_name) and f.endswith('.csv'):
-                result_files.append(os.path.join(result_dir, f))
-        
-        if not result_files:
-            QMessageBox.warning(self, "无结果", f"未找到源表 '{source_file}' 的匹配结果文件")
-            return
-        
-        # 选择导出目录
-        export_dir = QFileDialog.getExistingDirectory(
-            self,
-            f"选择导出目录 - {task_name}",
-            region_info.get('base_folder', '')
-        )
-        
-        if not export_dir:
-            return
-        
-        # 复制文件到导出目录
-        exported_count = 0
-        exported_files = []
-        for src_file in result_files:
-            filename = os.path.basename(src_file)
-            dst_file = os.path.join(export_dir, filename)
-            try:
-                shutil.copy2(src_file, dst_file)
-                exported_count += 1
-                exported_files.append(filename)
-                self._log(f"[Step4] 导出: {filename}", "info")
-            except Exception as e:
-                self._log(f"[Step4] 导出失败: {filename}, {e}", "error")
-        
-        # 显示导出的文件列表
-        file_list = "\n".join(f"  • {f}" for f in exported_files)
-        QMessageBox.information(
-            self,
-            "导出完成",
-            f"已导出 {exported_count} 个文件到:\n{export_dir}\n\n文件列表:\n{file_list}"
-        )
-    
-    def _delete_current_group(self):
-        """删除当前任务组"""
-        if self._current_group_idx < 0:
-            return
-        
-        group = self._task_groups[self._current_group_idx]
-        del self._task_groups[self._current_group_idx]
-        self._current_group_idx = -1
-        self._persist_tasks()  # 持久化
-        self._refresh_task_list()
-        
-        # 隐藏配置面板
-        self.config_container.setVisible(False)
-        self.empty_hint.setVisible(True)
-        self.config_title.setText("请选择一个任务组")
-        
-        self._log(f"[Step4] 删除任务组: {group['name']}", "info")
-    
-    def _run_selected_groups(self):
-        """执行选中的任务组"""
-        for group in self._task_groups:
-            if group.get("enabled", True):
-                group["status"] = "执行中"
-        self._refresh_task_list()
-        self._log("[Step4] 开始执行所有启用的任务组", "info")
-    
-    def _stop_all_groups(self):
-        """终止所有任务组"""
-        for group in self._task_groups:
-            if group["status"] == "执行中":
-                group["status"] = "已终止"
-                group["progress"] = 0
-        self._refresh_task_list()
-        self._log("[Step4] 终止所有任务组", "warn")
-    
-    def _export_all_results(self):
-        """批量导出所有已完成任务组的匹配结果
-        
-        缓存中只保留最新结果，文件命名格式：
-        - 匹配结果: {源表}_vs_{目标表}_匹配{N}条.csv
-        - 未匹配: {源表}_未匹配{M}条.csv
-        """
-        from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
-        import shutil
-        
-        # 获取已完成的任务组
-        completed_groups = [g for g in self._task_groups if g.get("status") == "已完成"]
-        if not completed_groups:
-            QMessageBox.warning(self, "无可导出任务", "没有已完成的任务组，请先执行任务")
             return
         
         # 获取缓存目录
@@ -1145,57 +1572,390 @@ class Step4Widget(BaseStepWidget):
         result_dir = os.path.join(cache_folder, "match_results")
         
         if not os.path.exists(result_dir):
-            QMessageBox.warning(self, "无结果", "匹配结果目录不存在")
+            QMessageBox.warning(self, "无结果", "匹配结果目录不存在，请先执行任务")
             return
         
-        # 选择导出目录
-        export_dir = QFileDialog.getExistingDirectory(
-            self,
-            f"选择导出目录 - 批量导出 ({len(completed_groups)} 个任务组)",
-            region_info.get('base_folder', '')
-        )
+        # 源表名
+        source_name = os.path.splitext(source_file)[0].replace("_标准化", "")
+        source_name = source_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
         
-        if not export_dir:
+        # 收集结果文件及其层级
+        level_info = {
+            '精确匹配': {'file': None, 'count': stats.get('exact', 0)},
+            '高置信度': {'file': None, 'count': stats.get('high_confidence', 0)},
+            '需人工确认': {'file': None, 'count': stats.get('need_review', 0)},
+            '未匹配': {'file': None, 'count': stats.get('unmatched', 0)}
+        }
+        
+        for f in os.listdir(result_dir):
+            if f.startswith(source_name) and f.endswith('.csv'):
+                for level in level_info:
+                    if level in f:
+                        level_info[level]['file'] = os.path.join(result_dir, f)
+                        break
+        
+        # 检查是否有结果文件
+        has_files = any(v['file'] for v in level_info.values())
+        if not has_files:
+            QMessageBox.warning(self, "无结果", f"未找到源表 '{source_file}' 的匹配结果文件")
             return
         
-        total_exported = 0
-        exported_files = []
+        # ===== 创建导出选择对话框 =====
+        dialog = QDialog(self)
+        dialog.setWindowTitle("导出匹配结果")
+        dialog.setMinimumWidth(420)
         
-        # 收集每个任务组的结果文件（按源表名查找）
-        for group in completed_groups:
-            source_file = group.get("source", "")
-            if not source_file:
-                continue
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+        
+        # 标题
+        title = QLabel(f"📤 导出匹配结果 - {task_name}")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #1f2937;")
+        layout.addWidget(title)
+        
+        # 源表信息
+        info = QLabel(f"源表: {source_file}")
+        info.setStyleSheet("color: #6b7280;")
+        layout.addWidget(info)
+        
+        # ===== 层级选择 =====
+        level_group = QGroupBox("选择要导出的层级")
+        level_layout = QVBoxLayout(level_group)
+        
+        self._export_checkboxes = {}
+        for level, data in level_info.items():
+            count = data['count']
+            has_file = data['file'] is not None
             
-            # 源表名（去掉扩展名和"_标准化"后缀，与保存时一致）
-            source_name = os.path.splitext(source_file)[0].replace("_标准化", "")
-            source_name = source_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+            cb = QCheckBox(f"{level} ({count} 条)")
+            cb.setEnabled(has_file and count > 0)
+            cb.setChecked(has_file and count > 0 and level != '未匹配')  # 默认选中有数据的（除未匹配）
             
-            # 收集该源表的结果文件
-            for f in os.listdir(result_dir):
-                if f.startswith(source_name) and f.endswith('.csv'):
-                    src_file = os.path.join(result_dir, f)
-                    dst_file = os.path.join(export_dir, f)
-                    try:
-                        shutil.copy2(src_file, dst_file)
-                        total_exported += 1
-                        exported_files.append(f)
-                    except Exception as e:
-                        self._log(f"[Step4] 导出失败: {f}, {e}", "error")
+            if not has_file:
+                cb.setToolTip("无结果文件")
+            elif count == 0:
+                cb.setToolTip("无数据")
+            
+            self._export_checkboxes[level] = cb
+            level_layout.addWidget(cb)
         
-        self._log(f"[Step4] 批量导出完成: {total_exported} 个文件", "info")
+        layout.addWidget(level_group)
         
-        # 显示摘要
-        file_list = "\n".join(f"  • {f}" for f in exported_files[:10])
-        if len(exported_files) > 10:
-            file_list += f"\n  ... 等共 {len(exported_files)} 个文件"
+        # ===== 格式选择 =====
+        format_group = QGroupBox("导出格式")
+        format_layout = QHBoxLayout(format_group)
         
-        QMessageBox.information(
-            self,
-            "批量导出完成",
-            f"已导出 {total_exported} 个文件到:\n{export_dir}\n\n"
-            f"包含 {len(completed_groups)} 个任务组的结果:\n{file_list}"
+        self._format_group = QButtonGroup()
+        rb_excel = QRadioButton("Excel (带颜色区分)")
+        rb_excel.setChecked(True)
+        rb_csv = QRadioButton("CSV")
+        
+        self._format_group.addButton(rb_excel, 0)
+        self._format_group.addButton(rb_csv, 1)
+        
+        format_layout.addWidget(rb_excel)
+        format_layout.addWidget(rb_csv)
+        format_layout.addStretch()
+        
+        layout.addWidget(format_group)
+        
+        # ===== 合并选择 =====
+        merge_group = QGroupBox("合并方式")
+        merge_layout = QHBoxLayout(merge_group)
+        
+        self._merge_group = QButtonGroup()
+        rb_merge = QRadioButton("合并为一个文件")
+        rb_merge.setChecked(True)
+        rb_separate = QRadioButton("每层级单独文件")
+        
+        self._merge_group.addButton(rb_merge, 0)
+        self._merge_group.addButton(rb_separate, 1)
+        
+        merge_layout.addWidget(rb_merge)
+        merge_layout.addWidget(rb_separate)
+        merge_layout.addStretch()
+        
+        layout.addWidget(merge_group)
+        
+        # ===== 按钮 =====
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        btn_cancel = QPushButton("取消")
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_cancel)
+        
+        btn_export = QPushButton("选择位置并导出")
+        btn_export.setStyleSheet("""
+            QPushButton {
+                background: #2563eb;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background: #1d4ed8; }
+        """)
+        btn_export.clicked.connect(lambda: self._do_export(
+            dialog, level_info, source_file, source_name, region_info
+        ))
+        btn_layout.addWidget(btn_export)
+        
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
+    
+    def _do_export(self, dialog, level_info, source_file, source_name, region_info):
+        """执行导出"""
+        from qgis.PyQt.QtWidgets import QFileDialog
+        from ..widgets.progress_dialog import ProgressDialog
+        from ..workers.match_export_worker import MatchExportWorker
+        
+        # 获取选中的层级
+        selected_levels = []
+        result_files = []
+        for level, cb in self._export_checkboxes.items():
+            if cb.isChecked():
+                selected_levels.append(level)
+                if level_info[level]['file']:
+                    result_files.append(level_info[level]['file'])
+        
+        if not selected_levels:
+            from qgis.PyQt.QtWidgets import QMessageBox
+            QMessageBox.warning(dialog, "请选择", "请至少选择一个层级")
+            return
+        
+        # 获取格式
+        is_excel = self._format_group.checkedId() == 0
+        is_merge = self._merge_group.checkedId() == 0
+        
+        base_folder = region_info.get('base_folder', '')
+        
+        if is_merge:
+            # 合并导出 - 选择单个文件
+            ext = ".xlsx" if is_excel else ".csv"
+            filter_str = "Excel 文件 (*.xlsx)" if is_excel else "CSV 文件 (*.csv)"
+            default_name = f"{source_name}_匹配结果{ext}"
+            
+            output_path, _ = QFileDialog.getSaveFileName(
+                dialog, "导出匹配结果", 
+                os.path.join(base_folder, default_name),
+                filter_str
+            )
+            
+            if not output_path:
+                return
+            
+            dialog.accept()
+            
+            # 后台导出
+            self._start_export_worker(
+                result_files, output_path, selected_levels, 
+                'excel' if is_excel else 'csv', source_file
+            )
+        else:
+            # 分开导出 - 选择目录
+            export_dir = QFileDialog.getExistingDirectory(
+                dialog, "选择导出目录", base_folder
+            )
+            
+            if not export_dir:
+                return
+            
+            dialog.accept()
+            
+            # 分别导出每个文件
+            self._export_separate_files(
+                result_files, export_dir, is_excel, source_file
+            )
+    
+    def _start_export_worker(self, result_files, output_path, levels, export_format, source_file):
+        """启动后台导出线程"""
+        from ..widgets.progress_dialog import ProgressDialog
+        from ..widgets.result_dialog import ResultDialog
+        from ..workers.match_export_worker import MatchExportWorker
+        
+        # 创建进度对话框
+        progress_dialog = ProgressDialog(
+            self, "导出匹配结果", "正在准备...", cancelable=True
         )
+        
+        # 创建 Worker
+        self._export_worker = MatchExportWorker(
+            result_files=result_files,
+            output_path=output_path,
+            levels=levels,
+            export_format=export_format,
+            source_file=source_file,
+            parent=self
+        )
+        
+        # 连接信号
+        self._export_worker.progress.connect(
+            lambda pct, msg: progress_dialog.set_progress(pct, msg)
+        )
+        self._export_worker.log.connect(self._log)
+        self._export_worker.finished.connect(
+            lambda result: self._on_export_finished(result, progress_dialog)
+        )
+        self._export_worker.error.connect(
+            lambda err: self._on_export_error(err, progress_dialog)
+        )
+        
+        # 取消按钮
+        progress_dialog.on_cancel = self._export_worker.cancel
+        
+        # 启动
+        self._export_worker.start()
+        progress_dialog.exec()
+    
+    def _on_export_finished(self, result, progress_dialog):
+        """导出完成"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        progress_dialog.close()
+        self._export_worker = None
+        
+        if result.get('cancelled'):
+            self._log("[Step4] 导出已取消", "warning")
+            return
+        
+        if result.get('success'):
+            ResultDialog.show_success(
+                self, "导出成功",
+                f"{result['message']}\n\n保存位置:\n{result.get('output_path', '')}"
+            )
+            self._log(f"[Step4] 导出成功: {result['message']}", "info")
+        else:
+            ResultDialog.show_warning(self, "导出失败", result.get('message', '未知错误'))
+    
+    def _on_export_error(self, error_msg, progress_dialog):
+        """导出出错"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        progress_dialog.close()
+        self._export_worker = None
+        
+        ResultDialog.show_error(self, "导出失败", error_msg)
+        self._log(f"[Step4] 导出出错: {error_msg}", "error")
+    
+    def _export_separate_files(self, result_files, export_dir, is_excel, source_file):
+        """分别导出多个文件"""
+        from ..widgets.result_dialog import ResultDialog
+        import shutil
+        
+        if is_excel:
+            # Excel 格式需要转换
+            from ...core.match_result_exporter import MatchResultExporter
+            import pandas as pd
+            
+            exporter = MatchResultExporter(log_callback=self._log)
+            exported = []
+            
+            for f in result_files:
+                try:
+                    df = pd.read_csv(f, encoding='utf-8-sig')
+                    basename = os.path.splitext(os.path.basename(f))[0]
+                    output_path = os.path.join(export_dir, f"{basename}.xlsx")
+                    result = exporter.export_to_excel(df, output_path, source_file)
+                    if result['success']:
+                        exported.append(os.path.basename(output_path))
+                except Exception as e:
+                    self._log(f"[Step4] 导出失败: {f}, {e}", "error")
+            
+            if exported:
+                ResultDialog.show_success(
+                    self, "导出成功",
+                    f"已导出 {len(exported)} 个文件到:\n{export_dir}"
+                )
+        else:
+            # CSV 直接复制
+            exported = []
+            for f in result_files:
+                try:
+                    dst = os.path.join(export_dir, os.path.basename(f))
+                    shutil.copy2(f, dst)
+                    exported.append(os.path.basename(dst))
+                except Exception as e:
+                    self._log(f"[Step4] 导出失败: {f}, {e}", "error")
+            
+            if exported:
+                ResultDialog.show_success(
+                    self, "导出成功",
+                    f"已导出 {len(exported)} 个文件到:\n{export_dir}"
+                )
+    
+    def _delete_current_group(self):
+        """删除当前任务组及其匹配结果"""
+        from qgis.PyQt.QtWidgets import QMessageBox
+        import os
+        import glob
+        
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        group_name = group.get('name', '未命名')
+        source_file = group.get('source', '')
+        
+        # 确认删除
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除任务组 [{group_name}] 吗？\n\n"
+            f"这将同时删除该任务组的：\n"
+            f"  - 匹配结果文件\n"
+            f"  - 缓存数据",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # 删除匹配结果文件
+        deleted_files = []
+        if source_file:
+            try:
+                global_config = self._get_global_config()
+                if global_config:
+                    region_info = global_config.get_region_info()
+                    cache_folder = region_info.get('cache_folder', '')
+                    
+                    if cache_folder:
+                        results_folder = os.path.join(cache_folder, 'match_results')
+                        if os.path.exists(results_folder):
+                            # 获取源表名称（不含扩展名）
+                            source_base = os.path.splitext(source_file)[0]
+                            
+                            # 删除以源表名开头的所有结果文件
+                            pattern = os.path.join(results_folder, f"{source_base}*.csv")
+                            for f in glob.glob(pattern):
+                                try:
+                                    os.remove(f)
+                                    deleted_files.append(os.path.basename(f))
+                                except Exception as e:
+                                    self._log(f"[Step4] 删除文件失败: {f}, {e}", "warning")
+            except Exception as e:
+                self._log(f"[Step4] 清理匹配结果时出错: {e}", "warning")
+        
+        # 删除任务组
+        del self._task_groups[self._current_group_idx]
+        self._current_group_idx = -1
+        self._persist_tasks()  # 持久化
+        self._refresh_task_list()
+        
+        # 隐藏配置面板和统计区域
+        self.config_container.setVisible(False)
+        self.stats_group.setVisible(False)
+        self.empty_hint.setVisible(True)
+        self.config_title.setText("请选择一个任务组")
+        
+        # 记录删除的文件
+        if deleted_files:
+            self._log(f"[Step4] 删除任务组: {group_name}，清理了 {len(deleted_files)} 个结果文件", "info")
+        else:
+            self._log(f"[Step4] 删除任务组: {group_name}", "info")
     
     def showEvent(self, event):
         """显示时刷新文件列表和初始化持久化"""

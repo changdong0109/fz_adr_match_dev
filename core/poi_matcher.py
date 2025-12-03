@@ -24,21 +24,25 @@ from .poi_utils import (
 )
 
 # RapidFuzz - 延迟检查
+HAS_RAPIDFUZZ = False
+RAPIDFUZZ_ERROR = None
+fuzz = None
+process = None
 try:
     from rapidfuzz import fuzz, process
     HAS_RAPIDFUZZ = True
-except ImportError:
-    HAS_RAPIDFUZZ = False
-    fuzz = None
-    process = None
+except Exception as e:
+    RAPIDFUZZ_ERROR = str(e)
 
 # SentenceTransformer - 延迟检查
+HAS_SENTENCE_TRANSFORMER = False
+SENTENCE_TRANSFORMER_ERROR = None
+SentenceTransformer = None
 try:
     from sentence_transformers import SentenceTransformer
     HAS_SENTENCE_TRANSFORMER = True
-except ImportError:
-    HAS_SENTENCE_TRANSFORMER = False
-    SentenceTransformer = None
+except Exception as e:
+    SENTENCE_TRANSFORMER_ERROR = str(e)
 
 
 # ================== 模型与匹配参数（V11原样保留） ==================
@@ -66,14 +70,16 @@ class POIMatcher:
         if self._dependencies_checked:
             return True
         
-        missing = []
+        errors = []
         if not HAS_RAPIDFUZZ:
-            missing.append("rapidfuzz")
+            errors.append(f"rapidfuzz: {RAPIDFUZZ_ERROR or '未安装'}")
         if not HAS_SENTENCE_TRANSFORMER:
-            missing.append("sentence-transformers tqdm")
+            errors.append(f"sentence-transformers: {SENTENCE_TRANSFORMER_ERROR or '未安装'}")
         
-        if missing:
-            msg = f"缺少依赖库，请在QGIS Python控制台或OSGeo4W Shell中执行:\npip install {' '.join(missing)}"
+        if errors:
+            detail = "\n".join(errors)
+            self._log(f"[POI匹配] 依赖检查失败:\n{detail}", "error")
+            msg = "缺少依赖库，请在QGIS Python控制台或OSGeo4W Shell中执行:\npip install sentence-transformers tqdm"
             self._log(f"[POI匹配] {msg}", "error")
             raise ImportError(msg)
         

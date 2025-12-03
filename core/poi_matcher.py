@@ -66,29 +66,31 @@ class POIMatcher:
         self._dependencies_checked = False
     
     def _check_dependencies(self):
-        """检查必需依赖（rapidfuzz 必须，sentence-transformers 可选）"""
+        """检查必需依赖"""
         if self._dependencies_checked:
             return True
         
-        # rapidfuzz 是必须的
+        errors = []
         if not HAS_RAPIDFUZZ:
-            msg = f"缺少必需依赖 rapidfuzz: {RAPIDFUZZ_ERROR or '未安装'}\n请执行: pip install rapidfuzz"
+            errors.append(f"rapidfuzz: {RAPIDFUZZ_ERROR or '未安装'}")
+        if not HAS_SENTENCE_TRANSFORMER:
+            errors.append(f"sentence-transformers: {SENTENCE_TRANSFORMER_ERROR or '未安装'}")
+        
+        if errors:
+            detail = "\n".join(errors)
+            self._log(f"[POI匹配] 依赖检查失败:\n{detail}", "error")
+            msg = "缺少必需依赖库，请在OSGeo4W Shell中执行:\npip install sentence-transformers rapidfuzz tqdm"
             self._log(f"[POI匹配] {msg}", "error")
             raise ImportError(msg)
-        
-        # sentence-transformers 是可选的（用于语义匹配）
-        if not HAS_SENTENCE_TRANSFORMER:
-            self._log(f"[POI匹配] ⚠️ sentence-transformers 不可用 ({SENTENCE_TRANSFORMER_ERROR or '未安装'})，将只使用模糊匹配", "warning")
-            self._log("[POI匹配] 提示: 模糊匹配对大部分场景已足够，语义匹配为增强功能", "info")
         
         self._dependencies_checked = True
         return True
     
     def _ensure_model(self):
-        """确保模型已加载（仅当 sentence-transformers 可用时）"""
+        """确保模型已加载"""
         self._check_dependencies()
         
-        if not self._model_loaded and HAS_SENTENCE_TRANSFORMER:
+        if not self._model_loaded:
             self._log("[POI匹配] 加载语义模型...", "info")
             self._model = SentenceTransformer(EMB_MODEL_NAME)
             self._model_loaded = True

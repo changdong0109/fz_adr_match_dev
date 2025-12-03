@@ -232,22 +232,33 @@ class MatchTaskManager:
         return self._tasks_file or ""
     
     def load_tasks(self) -> List[Dict]:
+        """从文件加载任务组"""
         tasks_file = self._get_tasks_file()
-        if not tasks_file or not os.path.exists(tasks_file):
+        if not tasks_file:
+            return []
+        if not os.path.exists(tasks_file):
             return []
         try:
             with open(tasks_file, 'r', encoding='utf-8') as f:
-                return json.load(f).get("tasks", [])
-        except Exception:
+                data = json.load(f)
+                tasks = data.get("tasks", [])
+                return tasks
+        except Exception as e:
+            print(f"[MatchTaskManager] 加载任务失败: {e}")
             return []
     
-    def save_tasks(self, tasks: List[Dict]):
+    def save_tasks(self, tasks: List[Dict]) -> bool:
+        """保存任务组到文件"""
         tasks_file = self._get_tasks_file()
         if not tasks_file:
-            return
+            return False
         try:
+            # 确保目录存在
+            os.makedirs(os.path.dirname(tasks_file), exist_ok=True)
             with open(tasks_file, 'w', encoding='utf-8') as f:
                 json.dump({"tasks": tasks}, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+            return True
+        except Exception as e:
+            print(f"[MatchTaskManager] 保存任务失败: {e}")
+            return False
 

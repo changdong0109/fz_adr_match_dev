@@ -46,10 +46,18 @@ class Step4Widget(BaseStepWidget):
     
     def _init_persist_manager(self):
         """初始化任务持久化管理器"""
+        if self._persist_manager:
+            return  # 已初始化
+        
         global_config = self._get_global_config()
         if global_config:
-            self._persist_manager = MatchTaskManager(global_config)
-            self._log("[Step4] 任务持久化管理器初始化完成", "info")
+            region_info = global_config.get_region_info()
+            cache_folder = region_info.get('cache_folder', '')
+            if cache_folder:
+                self._persist_manager = MatchTaskManager(global_config)
+                self._log(f"[Step4] 任务持久化管理器初始化完成，缓存目录: {cache_folder}", "info")
+            else:
+                self._log("[Step4] 缓存目录未配置，任务组暂不持久化", "debug")
     
     def _get_global_config(self):
         """获取全局配置组件"""
@@ -343,6 +351,15 @@ class Step4Widget(BaseStepWidget):
         """保存任务组到持久化存储"""
         if self._persist_manager:
             self._persist_manager.save_tasks(self._task_groups)
+            self._log(f"[Step4] 已保存 {len(self._task_groups)} 个任务组到本地缓存", "debug")
+        else:
+            # 尝试重新初始化
+            self._init_persist_manager()
+            if self._persist_manager:
+                self._persist_manager.save_tasks(self._task_groups)
+                self._log(f"[Step4] 已保存 {len(self._task_groups)} 个任务组到本地缓存", "debug")
+            else:
+                self._log("[Step4] 无法保存任务组：持久化管理器未初始化", "warning")
     
     def _load_demo_data(self):
         """[兼容] 初始化任务组数据"""
@@ -859,8 +876,14 @@ class Step4Widget(BaseStepWidget):
         self._log("[Step4] 终止所有任务组", "warn")
     
     def showEvent(self, event):
-        """显示时刷新文件列表"""
+        """显示时刷新文件列表和初始化持久化"""
         super().showEvent(event)
+        # 确保持久化管理器已初始化（用户可能在其他步骤配置了全局配置）
+        if not self._persist_manager:
+            self._init_persist_manager()
+            if self._persist_manager:
+                self._load_persisted_tasks()
+                self._refresh_task_list()
         self._load_available_files()
     
     def _preview_match(self):

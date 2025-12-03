@@ -24,6 +24,10 @@ class Step5Widget(BaseStepWidget):
         super().__init__(parent, log_callback, task_manager)
         self._build_ui()
         self._load_demo_stats()
+        # 初始化导出目录（使用全局配置）
+        self._init_export_dir()
+        # 加载导出历史
+        self._load_export_history()
     
     def _build_ui(self):
         """构建UI"""
@@ -184,17 +188,19 @@ class Step5Widget(BaseStepWidget):
         
         v.addLayout(format_layout)
         
-        # 输出目录
+        # 输出目录（使用全局配置自动生成，保留浏览按钮作为可选）
         dir_layout = QHBoxLayout()
         dir_layout.addWidget(QLabel("输出目录:"))
         
         self.edit_export_dir = QLineEdit()
         self.edit_export_dir.setObjectName("step5_path_input")
-        self.edit_export_dir.setPlaceholderText("选择或输入导出目录...")
+        self.edit_export_dir.setPlaceholderText("将自动使用全局配置目录...")
+        self.edit_export_dir.setReadOnly(True)  # 只读，自动生成
         dir_layout.addWidget(self.edit_export_dir)
         
         btn_browse = QPushButton("浏览...")
         btn_browse.setObjectName("step5_btn_browse")
+        btn_browse.setToolTip("可选择自定义导出目录（可选）")
         btn_browse.clicked.connect(self._browse_export_dir)
         dir_layout.addWidget(btn_browse)
         
@@ -289,20 +295,107 @@ class Step5Widget(BaseStepWidget):
         if hasattr(self, 'card_matched') and hasattr(self.card_matched, 'value_label'):
             self.card_matched.value_label.setText(f"{self._export_stats.get('matched', 0):,}")
     
-    def _load_demo_history(self):
-        """加载示例导出历史"""
-        demo_history = [
-            ("2025-12-01 22:30:15", "清洗结果", "4", "C:/output/cleaned/"),
-            ("2025-12-01 20:15:30", "标准化结果", "3", "C:/output/standardized/"),
-            ("2025-11-30 18:45:00", "匹配结果", "2", "C:/output/matched/"),
-        ]
+    def _load_export_history(self):
+        """从缓存文件加载导出历史"""
+        import os
+        import json
+        from datetime import datetime
         
-        self.history_table.setRowCount(len(demo_history))
-        for r, (time, type_, count, path) in enumerate(demo_history):
-            self.history_table.setItem(r, 0, QTableWidgetItem(time))
-            self.history_table.setItem(r, 1, QTableWidgetItem(type_))
-            self.history_table.setItem(r, 2, QTableWidgetItem(count))
-            self.history_table.setItem(r, 3, QTableWidgetItem(path))
+        global_config = self._get_global_config()
+        if not global_config:
+            return
+        
+        region_info = global_config.get_region_info()
+        cache_folder = region_info.get('cache_folder', '')
+        if not cache_folder:
+            return
+        
+        history_file = os.path.join(cache_folder, "export_history.json")
+        
+        exports = []
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    exports = data.get('exports', [])
+            except Exception as e:
+                self._log(f"[Step5] 加载导出历史失败: {e}", "error")
+        
+        # 按时间倒序排列（最新的在前）
+        exports.sort(key=lambda x: x.get('export_time', ''), reverse=True)
+        
+        # 更新表格
+        self.history_table.setRowCount(len(exports))
+        for r, export in enumerate(exports):
+            export_time = export.get('export_time', '')
+            # 格式化时间显示
+            try:
+                dt = datetime.fromisoformat(export_time.replace('Z', '+00:00'))
+                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                time_str = export_time
+            
+            export_type = export.get('type', '未知类型')
+            file_count = str(export.get('file_count', 0))
+            output_dir = export.get('output_dir', '')
+            
+            self.history_table.setItem(r, 0, QTableWidgetItem(time_str))
+            self.history_table.setItem(r, 1, QTableWidgetItem(export_type))
+            self.history_table.setItem(r, 2, QTableWidgetItem(file_count))
+            self.history_table.setItem(r, 3, QTableWidgetItem(output_dir))
+    
+    def _save_export_history(self, export_types: List[str], file_count: int, output_dir: str, output_files: List[str]):
+        """保存导出历史到缓存文件"""
+        import os
+        import json
+        from datetime import datetime
+        
+        global_config = self._get_global_config()
+        if not global_config:
+            return
+        
+        region_info = global_config.get_region_info()
+        cache_folder = region_info.get('cache_folder', '')
+        if not cache_folder:
+            return
+        
+        history_file = os.path.join(cache_folder, "export_history.json")
+        
+        # 加载现有历史
+        exports = []
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    exports = data.get('exports', [])
+            except Exception:
+                exports = []
+        
+        # 创建新记录
+        export_id = f"export_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        export_record = {
+            "id": export_id,
+            "type": ", ".join(export_types),  # 导出类型（多个用逗号分隔）
+            "file_count": file_count,
+            "output_dir": output_dir,
+            "output_files": output_files,
+            "export_time": datetime.now().isoformat()
+        }
+        
+        exports.append(export_record)
+        
+        # 限制历史记录数量（最多保留100条）
+        if len(exports) > 100:
+            exports = exports[-100:]
+        
+        # 保存
+        try:
+            os.makedirs(cache_folder, exist_ok=True)
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump({"exports": exports}, f, ensure_ascii=False, indent=2)
+            self._log(f"[Step5] 导出历史已保存: {export_id}", "info")
+        except Exception as e:
+            self._log(f"[Step5] 保存导出历史失败: {e}", "error")
     
     def _refresh_stats(self):
         """刷新统计数据"""
@@ -310,13 +403,42 @@ class Step5Widget(BaseStepWidget):
         # TODO: 从实际数据加载统计
         self._update_stat_cards()
     
+    def _init_export_dir(self):
+        """初始化导出目录（使用全局配置）"""
+        export_dir = self._get_export_dir()
+        if export_dir:
+            self.edit_export_dir.setText(export_dir)
+            self.edit_export_dir.setReadOnly(False)  # 允许编辑（用户可以选择自定义）
+    
+    def _get_export_dir(self):
+        """获取导出目录（使用全局配置自动生成）"""
+        global_config = self._get_global_config()
+        if not global_config:
+            return None
+        
+        import os
+        region_info = global_config.get_region_info()
+        base_folder = region_info.get('base_folder', '')
+        province = region_info.get('province', '')
+        city = region_info.get('city', '')
+        county = region_info.get('county', '')
+        
+        if not base_folder or not province or not city:
+            return None
+        
+        # 生成导出目录：{省}{市}{县}_导出
+        export_dir = os.path.join(base_folder, f"{province}{city}{county}_导出")
+        os.makedirs(export_dir, exist_ok=True)
+        
+        return export_dir
+    
     def _browse_export_dir(self):
-        """浏览导出目录"""
+        """浏览导出目录（可选，允许用户自定义）"""
         current_dir = self.edit_export_dir.text() or ""
-        path = QFileDialog.getExistingDirectory(self, "选择导出目录", current_dir)
+        path = QFileDialog.getExistingDirectory(self, "选择导出目录（可选）", current_dir)
         if path:
             self.edit_export_dir.setText(path)
-            self._log(f"[Step5] 选择导出目录: {path}", "info")
+            self._log(f"[Step5] 选择自定义导出目录: {path}", "info")
     
     def _run_export(self):
         """执行导出 - 调用 ExportManager（后台线程）"""
@@ -329,10 +451,15 @@ class Step5Widget(BaseStepWidget):
             ResultDialog.show_warning(self, "任务进行中", "请等待当前导出任务完成")
             return
         
-        export_dir = self.edit_export_dir.text()
+        # 获取导出目录（优先使用用户选择的，否则使用全局配置）
+        export_dir = self.edit_export_dir.text().strip()
         if not export_dir:
-            ResultDialog.show_warning(self, "请先选择导出目录")
-            return
+            # 如果为空，尝试使用全局配置
+            export_dir = self._get_export_dir()
+            if not export_dir:
+                ResultDialog.show_warning(self, "导出目录错误", "请先配置全局区域和根目录")
+                return
+            self.edit_export_dir.setText(export_dir)
         
         # 收集选中的导出类型
         export_types = []
@@ -390,6 +517,9 @@ class Step5Widget(BaseStepWidget):
             'selected_fields': selected_fields
         }
         
+        # 保存export_types到实例变量，供_on_export_finished使用
+        self._current_export_types = export_types
+        
         # 创建并启动 Worker
         self._export_worker = ExportWorker(
             exporter=exporter,
@@ -438,14 +568,25 @@ class Step5Widget(BaseStepWidget):
         self.export_progress.setValue(self.export_progress.maximum())
         self.lbl_export_status.setText("完成")
         
+        # 获取导出类型（从实例变量或summary）
+        export_types = getattr(self, '_current_export_types', summary.get('export_types', []))
+        
         if total_fail == 0 and total_success > 0:
             self._log(f"[Step5] 导出完成: 成功 {total_success} 个文件", "success")
+            # 保存导出历史
+            self._save_export_history(export_types, total_success, export_dir, summary.get('output_files', []))
+            # 刷新历史表格
+            self._load_export_history()
             ResultDialog.show_success(
                 self, "导出成功",
                 f"成功导出 {total_success} 个文件到:\n{export_dir}"
             )
         elif total_success > 0:
             self._log(f"[Step5] 导出部分完成: 成功 {total_success}, 失败 {total_fail}", "warning")
+            # 保存导出历史（部分成功也记录）
+            self._save_export_history(export_types, total_success, export_dir, summary.get('output_files', []))
+            # 刷新历史表格
+            self._load_export_history()
             ResultDialog.show_warning(
                 self, "部分完成",
                 f"成功: {total_success} 个文件\n失败: {total_fail} 个文件"

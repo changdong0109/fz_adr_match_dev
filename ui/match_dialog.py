@@ -10,7 +10,8 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import QEvent, Qt
 from qgis.PyQt.QtGui import QFont, QCloseEvent
 
-from .steps import Step1Widget, Step2Widget, Step3Widget, Step4Widget, Step5Widget
+from .steps import Step1Widget, Step2Widget, Step3Widget, Step4Widget
+# from .steps import Step5Widget  # 已隐藏
 from .modals import FilterModal, MatchModal
 from .widgets import TaskManager, GlobalConfigWidget
 from .styles import StyleManager
@@ -98,7 +99,7 @@ class MatchDialog(QDialog):
             "Step2 字段映射与清洗",
             "Step3 标准化解析 & 关联",
             "Step4 匹配任务管理",
-            "Step5 导出 & 日志",
+            # "Step5 导出 & 日志",  # 已隐藏
         ]
         for text in steps:
             item = QListWidgetItem(text)
@@ -205,12 +206,12 @@ class MatchDialog(QDialog):
             global_config=self.global_config
         )
         
-        # Step5
-        self.step_widgets[5] = Step5Widget(
-            self, self._log, self.task_manager, 
-            log_panel=None,
-            global_config=self.global_config
-        )
+        # Step5 - 已隐藏，但保留widget创建（以防后续需要）
+        # self.step_widgets[5] = Step5Widget(
+        #     self, self._log, self.task_manager, 
+        #     log_panel=None,
+        #     global_config=self.global_config
+        # )
         
         for i, widget in self.step_widgets.items():
             self.content_layout.addWidget(widget)
@@ -317,7 +318,7 @@ class MatchDialog(QDialog):
             2: ("Step2 字段映射与清洗", "为每个文件配置多个字段组合，一次性批量清洗。"),
             3: ("Step3 标准化解析 & 关联", "调用阿里云解析，并展示智能字段关联关系。"),
             4: ("Step4 匹配任务管理", "多源表任务组：一个源表 → 多目标表，带目标优先级。"),
-            5: ("Step5 导出 & 日志", "按类型导出所有结果，并集中查看日志。"),
+            # 5: ("Step5 导出 & 日志", "按类型导出所有结果，并集中查看日志。"),  # 已隐藏
         }
         if step_num in step_meta:
             title, subtitle = step_meta[step_num]

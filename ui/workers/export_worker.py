@@ -117,10 +117,16 @@ class ExportWorker(QThread):
             self.progress.emit(percent, 100, "导出匹配结果...")
             self.log.emit("[导出任务] 导出匹配结果...", "info")
             
-            if cache_folder and os.path.isdir(cache_folder):
-                match_files = [f for f in os.listdir(cache_folder) if f.endswith('_匹配结果.csv')]
+            # 修复路径：匹配结果保存在 match_results/ 目录下
+            result_dir = os.path.join(cache_folder, "match_results")
+            if result_dir and os.path.isdir(result_dir):
+                # 匹配结果：精确匹配、高置信度、需人工确认
+                match_files = [
+                    f for f in os.listdir(result_dir) 
+                    if f.endswith('.csv') and ('精确匹配' in f or '高置信度' in f or '需人工确认' in f)
+                ]
                 for f in match_files:
-                    input_path = os.path.join(cache_folder, f)
+                    input_path = os.path.join(result_dir, f)
                     output_name = os.path.splitext(f)[0] + f".{output_format}"
                     output_path = os.path.join(export_dir, output_name)
                     if self.exporter.export_from_file(input_path, output_path, output_format):
@@ -142,10 +148,16 @@ class ExportWorker(QThread):
             self.progress.emit(percent, 100, "导出未匹配数据...")
             self.log.emit("[导出任务] 导出未匹配数据...", "info")
             
-            if cache_folder and os.path.isdir(cache_folder):
-                unmatch_files = [f for f in os.listdir(cache_folder) if f.endswith('_未匹配.csv')]
+            # 修复路径：未匹配数据也保存在 match_results/ 目录下
+            result_dir = os.path.join(cache_folder, "match_results")
+            if result_dir and os.path.isdir(result_dir):
+                # 未匹配数据：文件名包含"未匹配"
+                unmatch_files = [
+                    f for f in os.listdir(result_dir) 
+                    if f.endswith('.csv') and '未匹配' in f
+                ]
                 for f in unmatch_files:
-                    input_path = os.path.join(cache_folder, f)
+                    input_path = os.path.join(result_dir, f)
                     output_name = os.path.splitext(f)[0] + f".{output_format}"
                     output_path = os.path.join(export_dir, output_name)
                     if self.exporter.export_from_file(input_path, output_path, output_format):

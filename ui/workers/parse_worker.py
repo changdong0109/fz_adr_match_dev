@@ -28,10 +28,41 @@ class ParseWorker(QThread):
         self.parser = parser
         self.test_limit = test_limit
         self._cancelled = False
+        self._region_lookup = None  # 延迟初始化
     
     def cancel(self):
         """取消任务"""
         self._cancelled = True
+    
+    def _get_region_lookup(self):
+        """延迟加载 RegionLookup"""
+        if self._region_lookup is None:
+            try:
+                from ...core.region_lookup import RegionLookup
+                self._region_lookup = RegionLookup()
+                self.log.emit("[解析任务] 已加载地址补全器", "debug")
+            except Exception as e:
+                self.log.emit(f"[解析任务] 加载地址补全器失败: {e}", "warning")
+        return self._region_lookup
+    
+    def _complete_region(self, address: str, province: str, city: str, 
+                         district: str, street: str) -> Optional[dict]:
+        """使用内置行政区划数据补全缺失的省市区县"""
+        lookup = self._get_region_lookup()
+        if not lookup:
+            return None
+        
+        try:
+            result = lookup.complete_address(
+                address, 
+                known_province=province,
+                known_city=city,
+                known_area=district,
+                known_street=street
+            )
+            return result
+        except Exception:
+            return None
     
     def run(self):
         """执行解析任务"""
@@ -121,14 +152,31 @@ class ParseWorker(QThread):
                     # 调用解析器
                     result = self.parser.parse(address)
                     
+                    # 获取解析结果
+                    province = result.get('province', '')
+                    city = result.get('city', '')
+                    district = result.get('district', '')
+                    street = result.get('street', '')
+                    
+                    # 如果省市区县缺失，使用 RegionLookup 补全
+                    if not province or not city or not district:
+                        completed = self._complete_region(
+                            address, province, city, district, street
+                        )
+                        if completed:
+                            province = completed.get('province', '') or province
+                            city = completed.get('city', '') or city
+                            district = completed.get('area', '') or district
+                            street = completed.get('street', '') or street
+                    
                     # 更新 DataFrame
                     df.at[idx, '标准化地址'] = result.get('std_address', '')
                     df.at[idx, '标准化POI抽取'] = result.get('predict_poi', '')
                     df.at[idx, 'POI来源'] = result.get('predict_poi_source', '')
-                    df.at[idx, '省'] = result.get('province', '')
-                    df.at[idx, '市'] = result.get('city', '')
-                    df.at[idx, '区县'] = result.get('district', '')
-                    df.at[idx, '街道镇'] = result.get('street', '')
+                    df.at[idx, '省'] = province
+                    df.at[idx, '市'] = city
+                    df.at[idx, '区县'] = district
+                    df.at[idx, '街道镇'] = street
                     df.at[idx, '村社区'] = result.get('village', '')
                     df.at[idx, '道路'] = result.get('road', '')
                     df.at[idx, '门牌号'] = result.get('road_no', '')

@@ -1450,6 +1450,92 @@ QPushButton#step4_btn_delete:hover {
     background-color: #fee2e2;
 }
 
+/* 导出结果按钮 */
+QPushButton#step4_btn_export {
+    padding: 8px 20px;
+    font-size: 13px;
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_export:hover {
+    background-color: #2563eb;
+}
+
+QPushButton#step4_btn_export:disabled {
+    background-color: #94a3b8;
+    color: #e2e8f0;
+}
+
+/* 批量导出按钮 */
+QPushButton#step4_btn_batch_export {
+    padding: 8px 16px;
+    font-size: 13px;
+    background-color: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+QPushButton#step4_btn_batch_export:hover {
+    background-color: #0284c7;
+}
+
+/* 执行任务按钮禁用状态 */
+QPushButton#step4_btn_run:disabled {
+    background-color: #94a3b8;
+    color: #e2e8f0;
+}
+
+QPushButton#step4_btn_preview:disabled,
+QPushButton#step4_btn_delete:disabled {
+    background-color: #f1f5f9;
+    color: #94a3b8;
+    border-color: #e2e8f0;
+}
+
+/* 执行进度区域 */
+QGroupBox#step4_progress_group {
+    font-size: 12px;
+    font-weight: 600;
+    color: #374151;
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-top: 8px;
+    padding-top: 12px;
+}
+
+QGroupBox#step4_progress_group::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+}
+
+/* 进度条 */
+QProgressBar#step4_match_progress {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background-color: #f1f5f9;
+    text-align: center;
+    font-size: 11px;
+    color: #374151;
+}
+
+QProgressBar#step4_match_progress::chunk {
+    background-color: #16a34a;
+    border-radius: 3px;
+}
+
+/* 状态标签 */
+QLabel#step4_match_status {
+    font-size: 12px;
+    color: #64748b;
+    padding: 4px 0;
+}
+
 QPushButton#step4_btn_add,
 QPushButton#step4_btn_add_target {
     padding: 6px 14px;

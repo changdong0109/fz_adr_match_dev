@@ -568,6 +568,9 @@ class Step3Widget(BaseStepWidget):
             # 保存结果
             self._relation_result = result
             
+            # 持久化到 field_relations.json
+            self._save_field_relations(result)
+            
             # 更新 UI
             self._update_relation_ui(result)
             
@@ -622,6 +625,123 @@ class Step3Widget(BaseStepWidget):
             self._log(f"[关联分析] {folder_type}目录找到 {len(folder_files)} 个文件", "debug")
         
         return files
+    
+    def _save_field_relations(self, result: Dict[str, Any]):
+        """保存字段关联结果到 field_relations.json
+        
+        持久化的数据供 Step4 匹配使用
+        包含：字段信息、关联关系、匹配推荐
+        """
+        from datetime import datetime
+        
+        global_config = self._get_global_config()
+        if not global_config:
+            self._log("[关联分析] 无法保存: 未获取到全局配置", "warning")
+            return
+        
+        region_info = global_config.get_region_info()
+        cache_folder = region_info.get("cache_folder", "")
+        if not cache_folder:
+            self._log("[关联分析] 无法保存: 缓存目录为空", "warning")
+            return
+        
+        os.makedirs(cache_folder, exist_ok=True)
+        output_file = os.path.join(cache_folder, "field_relations.json")
+        
+        # 构建持久化数据
+        fields = result.get('fields', [])
+        relations = result.get('relations', [])
+        
+        # 分析字段类别（标识类、地址类、行政区类）
+        field_analysis = []
+        for f in fields:
+            field_name = f.get('field', '').lower()
+            category = 'other'
+            
+            # 识别字段类别
+            if any(k in field_name for k in ['id', 'gid', '编号', '号码', 'code', 'uuid']):
+                category = 'identifier'
+            elif any(k in field_name for k in ['省', '市', '县', '区', '街道', '镇', '乡', 'province', 'city', 'area', 'district']):
+                category = 'region'
+            elif any(k in field_name for k in ['poi', 'name', '名称', '地址', 'address', 'location', '标准化']):
+                category = 'address'
+            
+            field_analysis.append({
+                'file': f.get('file', ''),
+                'field': f.get('field', ''),
+                'unique_count': f.get('unique_count', 0),
+                'category': category
+            })
+        
+        # 加载 Step2 配置获取核心匹配字段
+        file_configs = {}
+        for f in fields:
+            file_name = f.get('file', '')
+            if file_name and file_name not in file_configs:
+                # 尝试加载该文件的 combo_config
+                base_name = os.path.splitext(file_name)[0].replace('_标准化', '')
+                combo_file = os.path.join(cache_folder, f"{base_name}_combo_config.json")
+                if os.path.exists(combo_file):
+                    try:
+                        with open(combo_file, 'r', encoding='utf-8') as cf:
+                            combo_config = json.load(cf)
+                            combo_fields = combo_config.get('fields', [])
+                            core_field = combo_fields[-1].get('field', '') if combo_fields else ''
+                            file_configs[file_name] = {
+                                'core_match_field': core_field,
+                                'combo_fields': [f.get('field', '') for f in combo_fields]
+                            }
+                    except Exception:
+                        pass
+        
+        # 标记关联的用途（匹配、过滤、约束）
+        relation_data = []
+        for rel in relations:
+            field_a = rel.get('field_a', '')
+            field_b = rel.get('field_b', '')
+            
+            # 解析文件名和字段名
+            file_a, col_a = field_a.rsplit('.', 1) if '.' in field_a else ('', field_a)
+            file_b, col_b = field_b.rsplit('.', 1) if '.' in field_b else ('', field_b)
+            
+            # 判断用途
+            col_a_lower = col_a.lower()
+            col_b_lower = col_b.lower()
+            
+            use_for = 'match'  # 默认用于匹配
+            
+            # 行政区字段用于约束
+            if any(k in col_a_lower for k in ['省', '市', '县', '区', 'province', 'city', 'district']):
+                use_for = 'constraint'
+            # ID/编号字段用于过滤
+            elif any(k in col_a_lower for k in ['id', 'gid', '编号', 'code']):
+                use_for = 'filter'
+            
+            relation_data.append({
+                'field_a': field_a,
+                'field_b': field_b,
+                'overlap_count': rel.get('overlap_count', 0),
+                'jaccard': rel.get('jaccard', 0),
+                'use_for': use_for
+            })
+        
+        # 构建完整数据
+        data = {
+            'version': '1.0',
+            'updated_at': datetime.now().isoformat(),
+            'source_files': list(set(f.get('file', '') for f in fields)),
+            'file_configs': file_configs,
+            'field_analysis': field_analysis,
+            'relations': relation_data,
+            'insights': result.get('insights', [])
+        }
+        
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            self._log(f"[关联分析] 已保存到 {output_file}", "info")
+        except Exception as e:
+            self._log(f"[关联分析] 保存失败: {e}", "error")
     
     def _update_relation_ui(self, result: Dict[str, Any]):
         """更新关联分析 UI"""

@@ -470,6 +470,8 @@ class AliAddressParser:
             "room_no": room_no,
             "predict_poi": predict_poi,
             "predict_poi_source": predict_poi_source,
+            "structure_cached": structure_cached,
+            "poi_cached": poi_cached,
             "cached": structure_cached and poi_cached  # 两个都命中才算完全缓存
         }
         
@@ -496,6 +498,8 @@ class AliAddressParser:
             "room_no": "",
             "predict_poi": "",
             "predict_poi_source": "empty",
+            "structure_cached": False,
+            "poi_cached": False,
             "cached": False
         }
     
@@ -611,6 +615,10 @@ class AliAddressParser:
             self._log(f"[API] 已加载缓存: StructureAddress {len(structure_cache)} 条, PredictPOI {len(poi_cache)} 条")
         except Exception as e:
             self._log(f"[API] 加载缓存失败: {e}", "error")
+    
+    def save_cache(self):
+        """保存缓存（别名方法）"""
+        self.save_cache_to_disk()
     
     def save_cache_to_disk(self):
         """保存缓存到磁盘（分别保存两个 API 的缓存）"""

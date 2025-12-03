@@ -175,6 +175,13 @@ class Step5Widget(BaseStepWidget):
         format_layout.addWidget(self.radio_csv)
         
         format_layout.addStretch()
+        
+        btn_config_fields = QPushButton("配置导出字段...")
+        btn_config_fields.setObjectName("step5_btn_config_fields")
+        btn_config_fields.setToolTip("选择要导出的字段")
+        btn_config_fields.clicked.connect(self._open_field_config_dialog)
+        format_layout.addWidget(btn_config_fields)
+        
         v.addLayout(format_layout)
         
         # 输出目录
@@ -312,10 +319,18 @@ class Step5Widget(BaseStepWidget):
             self._log(f"[Step5] 选择导出目录: {path}", "info")
     
     def _run_export(self):
-        """执行导出"""
+        """执行导出 - 调用 ExportManager（后台线程）"""
+        import os
+        from ..widgets.result_dialog import ResultDialog
+        from ..workers.export_worker import ExportWorker
+        
+        # 检查是否已有任务在运行
+        if hasattr(self, '_export_worker') and self._export_worker is not None and self._export_worker.isRunning():
+            ResultDialog.show_warning(self, "任务进行中", "请等待当前导出任务完成")
+            return
+        
         export_dir = self.edit_export_dir.text()
         if not export_dir:
-            from ..widgets.result_dialog import ResultDialog
             ResultDialog.show_warning(self, "请先选择导出目录")
             return
         
@@ -333,20 +348,135 @@ class Step5Widget(BaseStepWidget):
             export_types.append("关联分析结果")
         
         if not export_types:
-            from ..widgets.result_dialog import ResultDialog
             ResultDialog.show_warning(self, "请至少选择一种导出类型")
             return
         
-        self._log(f"[Step5] 开始导出: {', '.join(export_types)}", "info")
+        # 获取全局配置
+        global_config = self._get_global_config()
+        if not global_config:
+            self._log("[Step5] 无法获取全局配置", "error")
+            self.lbl_export_status.setText("失败")
+            return
+        
+        region_info = global_config.get_region_info()
+        customer_folder = region_info.get('customer_folder', '')
+        cache_folder = region_info.get('cache_folder', '')
+        
+        # 确定导出格式
+        output_format = "xlsx" if self.radio_excel.isChecked() else "csv"
+        
+        # 获取字段配置
+        field_config = self.get_export_field_config()
+        selected_fields = field_config.get("selected", [])
+        
+        self._log(f"[Step5] 开始后台导出: {', '.join(export_types)}", "info")
         self.lbl_export_status.setText("导出中...")
-        self.export_progress.setValue(50)
+        self.export_progress.setValue(0)
+        self.export_progress.setMaximum(len(export_types))
+        self.btn_export.setEnabled(False)
+        self.btn_export.setText("导出中...")
         
-        # TODO: 实现实际导出逻辑
+        # 创建导出器（不传入 log_callback，避免后台线程直接操作 UI）
+        from ...core.export_manager import ExportManager
+        exporter = ExportManager(log_callback=None)  # 日志通过 Worker 信号发送
         
-        # 模拟完成
-        self.export_progress.setValue(100)
+        # 构建导出配置
+        export_config = {
+            'export_dir': export_dir,
+            'export_types': export_types,
+            'output_format': output_format,
+            'customer_folder': customer_folder,
+            'cache_folder': cache_folder,
+            'selected_fields': selected_fields
+        }
+        
+        # 创建并启动 Worker
+        self._export_worker = ExportWorker(
+            exporter=exporter,
+            export_config=export_config,
+            parent=self
+        )
+        
+        # 连接信号
+        self._export_worker.progress.connect(self._on_export_progress)
+        self._export_worker.log.connect(self._log)
+        self._export_worker.file_completed.connect(self._on_file_exported)
+        self._export_worker.finished.connect(self._on_export_finished)
+        self._export_worker.error.connect(self._on_export_error)
+        
+        # 启动
+        self._export_worker.start()
+    
+    def _on_export_progress(self, current: int, total: int, message: str):
+        """导出进度更新"""
+        self.export_progress.setMaximum(total)
+        self.export_progress.setValue(current)
+        self.lbl_export_status.setText(message)
+    
+    def _on_file_exported(self, file_name: str, result: dict):
+        """单个文件导出完成"""
+        if result.get('success'):
+            self._log(f"[Step5] 导出成功: {file_name}", "info")
+    
+    def _on_export_finished(self, summary: dict):
+        """导出任务完成"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        self.btn_export.setEnabled(True)
+        self.btn_export.setText("开始导出")
+        self._export_worker = None
+        
+        if summary.get('cancelled'):
+            self.lbl_export_status.setText("已取消")
+            self._log("[Step5] 导出任务已取消", "warning")
+            return
+        
+        total_success = summary.get('success_count', 0)
+        total_fail = summary.get('fail_count', 0)
+        export_dir = summary.get('export_dir', '')
+        
+        self.export_progress.setValue(self.export_progress.maximum())
         self.lbl_export_status.setText("完成")
-        self._log(f"[Step5] 导出完成，输出目录: {export_dir}", "success")
+        
+        if total_fail == 0 and total_success > 0:
+            self._log(f"[Step5] 导出完成: 成功 {total_success} 个文件", "success")
+            ResultDialog.show_success(
+                self, "导出成功",
+                f"成功导出 {total_success} 个文件到:\n{export_dir}"
+            )
+        elif total_success > 0:
+            self._log(f"[Step5] 导出部分完成: 成功 {total_success}, 失败 {total_fail}", "warning")
+            ResultDialog.show_warning(
+                self, "部分完成",
+                f"成功: {total_success} 个文件\n失败: {total_fail} 个文件"
+            )
+        else:
+            self._log("[Step5] 没有找到可导出的文件", "warning")
+            ResultDialog.show_warning(self, "无可导出数据", "没有找到符合条件的文件")
+    
+    def _on_export_error(self, error_msg: str):
+        """导出任务出错"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        self.btn_export.setEnabled(True)
+        self.btn_export.setText("开始导出")
+        self.export_progress.setValue(0)
+        self.lbl_export_status.setText("失败")
+        self._export_worker = None
+        
+        self._log(f"[Step5] 导出失败: {error_msg}", "error")
+        ResultDialog.show_error(self, "导出失败", error_msg[:500])
+    
+    def _get_global_config(self):
+        """获取全局配置组件"""
+        if self.global_config:
+            return self.global_config
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'global_config'):
+                return parent.global_config
+            parent = parent.parent()
+        return None
     
     def _open_export_dir(self):
         """打开导出目录"""
@@ -357,3 +487,96 @@ class Step5Widget(BaseStepWidget):
         else:
             from ..widgets.result_dialog import ResultDialog
             ResultDialog.show_warning(self, "导出目录不存在")
+    
+    def _open_field_config_dialog(self):
+        """打开字段配置对话框"""
+        from qgis.PyQt.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
+            QPushButton, QLabel, QAbstractItemView
+        )
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("配置导出字段")
+        dialog.resize(500, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        lbl = QLabel("勾选要导出的字段：")
+        layout.addWidget(lbl)
+        
+        # 获取可用字段
+        available_fields = self._get_available_export_fields()
+        
+        if not hasattr(self, '_export_field_config'):
+            self._export_field_config = {"selected": available_fields.copy()}
+        
+        # 字段列表
+        self._field_list = QListWidget()
+        
+        for field in available_fields:
+            item = QListWidgetItem(field)
+            item.setCheckState(
+                Qt.CheckState.Checked if field in self._export_field_config.get("selected", [])
+                else Qt.CheckState.Unchecked
+            )
+            self._field_list.addItem(item)
+        
+        layout.addWidget(self._field_list, 1)
+        
+        # 快捷按钮
+        quick_layout = QHBoxLayout()
+        btn_all = QPushButton("全选")
+        btn_all.clicked.connect(lambda: self._set_all_fields(True))
+        quick_layout.addWidget(btn_all)
+        
+        btn_none = QPushButton("全不选")
+        btn_none.clicked.connect(lambda: self._set_all_fields(False))
+        quick_layout.addWidget(btn_none)
+        quick_layout.addStretch()
+        layout.addLayout(quick_layout)
+        
+        # 按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_ok = QPushButton("确定")
+        btn_ok.clicked.connect(lambda: self._save_field_config(dialog))
+        btn_layout.addWidget(btn_ok)
+        btn_cancel = QPushButton("取消")
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+        
+        dialog.exec()
+    
+    def _get_available_export_fields(self):
+        """获取可用的导出字段"""
+        return [
+            "源表文件", "源表行号", "源表名称", "源表标准化地址", "源表POI原始", "源表POI",
+            "目标表文件", "目标表行号", "目标表名称", "目标表标准化地址", "目标表POI原始", "目标表POI",
+            "匹配类型", "匹配类型代码", "匹配分数", "POI来源", "是否匹配"
+        ]
+    
+    def _set_all_fields(self, checked: bool):
+        """全选/全不选"""
+        for i in range(self._field_list.count()):
+            self._field_list.item(i).setCheckState(
+                Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+            )
+    
+    def _save_field_config(self, dialog):
+        """保存字段配置"""
+        selected = []
+        for i in range(self._field_list.count()):
+            item = self._field_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                selected.append(item.text())
+        
+        self._export_field_config = {"selected": selected}
+        self._log(f"[Step5] 导出字段配置已保存: {len(selected)} 个", "info")
+        dialog.accept()
+    
+    def get_export_field_config(self):
+        """获取导出字段配置"""
+        if not hasattr(self, '_export_field_config'):
+            return {"selected": self._get_available_export_fields()}
+        return self._export_field_config

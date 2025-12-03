@@ -1,63 +1,75 @@
 """
 数据清洗模块
 职责：根据用户配置的字段组合，对数据进行清洗和拼接
+
+架构设计：
+- CleaningRules: 规则配置（可序列化、可自定义）
+- AddressValidator: 地址验证器（判断是否有效地址）
+- TextSanitizer: 文本清洗器（去噪声、去占位词）
+- FieldConfigChecker: 字段配置检查器
+- DataCleaner: 清洗执行器（组合以上组件）
 """
 import os
 import re
 from typing import Callable, Dict, List, Optional, Tuple
 import pandas as pd
 
+# 导入规则模块
+from .cleaning_rules import (
+    CleaningRules, 
+    AddressValidator, 
+    TextSanitizer, 
+    FieldConfigChecker
+)
+
 
 class DataCleaner:
-    """数据清洗器"""
+    """
+    数据清洗器
     
-    # 噪声关键字列表（燃气压力级别、异常标记等）
-    NOISE_KEYWORDS = [
-        # 燃气压力级别
-        '高压', '中压', '低压', '高压A', '高压B', '中压A', '中压B', '低压A', '低压B',
-        '高压a', '高压b', '中压a', '中压b', '低压a', '低压b',
-        # 异常标记
-        'nan', 'NaN', 'NAN', 'null', 'NULL', 'None', 'NONE',
-        # 技术代号
-        '_A', '_B', '_a', '_b'
-    ]
+    职责：执行清洗流程，不关心具体规则
+    规则由 CleaningRules 配置类提供
+    """
     
-    # 冗余占位词列表（需要清洗掉的无意义词）
-    PLACEHOLDER_WORDS = [
-        '无单元', '无号', '无楼', '无栋', '无门', '无室', '无层',
-        '无门牌', '无门牌号', '无编号', '无房号',
-        '暂无', '未知', '不详', '待定'
-    ]
-    
-    # 纯行政区正则（严格匹配：只有省市区县+街道/乡镇/村，无其他内容）
-    # 例如："河北省廊坊市" "广阳区新开路街道" 是纯行政区
-    # 但 "新开路街道未来城1栋" 不是纯行政区（有具体地址信息）
-    REGION_PATTERN = re.compile(
-        r'^[\s]*([\u4e00-\u9fa5]{2,}(省|自治区|市|区|县|街道办事处|街道|乡|镇|村|社区|新区|开发区|办事处))[\s]*$'
-    )
-    
-    # 具体地址关键词（有这些词说明不是纯行政区）
-    SPECIFIC_ADDRESS_KEYWORDS = [
-        '号', '栋', '楼', '层', '室', '单元', '幢', '座', '门',
-        '小区', '花园', '公寓', '大厦', '广场', '中心', '城', '苑', '园', '庄', '庭',
-        '超市', '商店', '店', '公司', '厂', '企业', '集团', '有限',
-        '医院', '学校', '酒店', '宾馆', '银行', '餐厅', '饭店',
-        '路', '道', '街', '巷', '胡同', '弄', '里'
-    ]
-    
-    def __init__(self, log_callback: Optional[Callable[[str, str], None]] = None):
+    def __init__(self, 
+                 log_callback: Optional[Callable[[str, str], None]] = None,
+                 rules: Optional[CleaningRules] = None):
         """
         初始化清洗器
         
         Args:
             log_callback: 日志回调函数 (message, level)
+            rules: 清洗规则配置，默认使用 CleaningRules.default()
         """
         self.log_callback = log_callback
+        
+        # 初始化规则和组件
+        self.rules = rules or CleaningRules.default()
+        self.validator = AddressValidator(self.rules)
+        self.sanitizer = TextSanitizer(self.rules)
+        self.config_checker = FieldConfigChecker(self.rules)
+        
+        # 为了向后兼容，保留类属性引用
+        self.SPECIFIC_ADDRESS_KEYWORDS = self.rules.address_keywords
     
     def _log(self, message: str, level: str = "info"):
         """输出日志"""
         if self.log_callback:
             self.log_callback(message, level)
+    
+    def _move_id_columns_to_front(self, df: pd.DataFrame) -> pd.DataFrame:
+        """将ID追溯字段移到首列"""
+        id_cols = ['_record_id', '_source_file', '_source_row']
+        existing_id_cols = [c for c in id_cols if c in df.columns]
+        
+        if not existing_id_cols:
+            return df
+        
+        # 重新排列列：ID字段在前，其他字段在后
+        other_cols = [c for c in df.columns if c not in existing_id_cols]
+        new_order = existing_id_cols + other_cols
+        
+        return df[new_order]
     
     def clean_file(
         self,
@@ -133,6 +145,12 @@ class DataCleaner:
                     "invalid_count": 0
                 }
             
+            # === 智能字段配置检查 ===
+            field_warnings = self._check_field_config(df, fields, file_stem)
+            if field_warnings:
+                for warning in field_warnings:
+                    self._log(warning, "warning")
+            
             # 新增清洗后字段列名
             clean_column_name = f"{file_stem}_adr_clean"
             
@@ -164,7 +182,13 @@ class DataCleaner:
                 
                 # 检查是否为空行（配置字段全为空）
                 if self._is_empty_row(row, active_fields):
-                    invalid_rows.append((row, "全空行"))
+                    # 为剔除数据添加追溯ID
+                    row_with_id = row.copy()
+                    row_num = idx + 2
+                    row_with_id['_record_id'] = f"{file_stem}_{row_num}"
+                    row_with_id['_source_file'] = file_name
+                    row_with_id['_source_row'] = row_num
+                    invalid_rows.append((row_with_id, "全空行"))
                     continue
                 
                 # 构建清洗后的文本
@@ -172,20 +196,52 @@ class DataCleaner:
                 
                 # 检查清洗后文本是否有效（先检查空，再检查纯行政区）
                 if not clean_text.strip():
-                    # 记录原始值用于调试
-                    original_values = [str(row.get(f, '')) for f in active_fields]
-                    self._log(f"[清洗] 行{idx+1} 清洗后为空，原始值：{original_values}", "debug")
-                    invalid_rows.append((row, "清洗后为空"))
-                    continue
+                    # 尝试从所有非空字段中提取地址信息（放宽条件）
+                    fallback_text = self._extract_any_address(row)
+                    if fallback_text:
+                        # 找到了有效地址，使用回退文本
+                        clean_text = fallback_text
+                        self._log(f"[清洗] 行{idx+1} 使用回退地址提取: {clean_text[:30]}...", "debug")
+                    else:
+                        # 记录原始值用于调试
+                        original_values = [str(row.get(f, '')) for f in active_fields if pd.notna(row.get(f))]
+                        self._log(f"[清洗] 行{idx+1} 清洗后为空，原始值：{original_values}", "debug")
+                        # 为剔除数据也添加追溯ID
+                        row_with_id = row.copy()
+                        row_num = idx + 2
+                        row_with_id['_record_id'] = f"{file_stem}_{row_num}"
+                        row_with_id['_source_file'] = file_name
+                        row_with_id['_source_row'] = row_num
+                        invalid_rows.append((row_with_id, "清洗后为空"))
+                        continue
                 
-                # 检查是否为纯行政区行
+                # 检查是否为纯行政区行（使用更严格的判断）
                 if self._is_pure_region_row(clean_text):
-                    invalid_rows.append((row, "纯行政区"))
-                    continue
+                    # 再次确认：如果原始数据有楼栋/单元等信息，则不应剔除
+                    has_building_info = self._has_building_info(row)
+                    if has_building_info:
+                        self._log(f"[清洗] 行{idx+1} 虽判定为纯行政区但有楼栋信息，保留: {clean_text}", "debug")
+                    else:
+                        # 为剔除数据添加追溯ID
+                        row_with_id = row.copy()
+                        row_num = idx + 2
+                        row_with_id['_record_id'] = f"{file_stem}_{row_num}"
+                        row_with_id['_source_file'] = file_name
+                        row_with_id['_source_row'] = row_num
+                        invalid_rows.append((row_with_id, "纯行政区"))
+                        continue
                 
-                # 有效数据
+                # 有效数据 - 添加追溯ID字段
                 row_copy = row.copy()
                 row_copy[clean_column_name] = clean_text
+                
+                # 生成唯一记录ID（用于后续关联追溯）
+                # 格式：文件名_行号（行号从1开始，与Excel行号一致）
+                row_num = idx + 2  # +2 因为: idx从0开始(+1), CSV有表头行(+1)
+                row_copy['_record_id'] = f"{file_stem}_{row_num}"
+                row_copy['_source_file'] = file_name
+                row_copy['_source_row'] = row_num
+                
                 valid_rows.append(row_copy)
             
             # 创建输出目录（规范化路径，避免混合斜杠）
@@ -215,6 +271,8 @@ class DataCleaner:
             valid_save_error = None
             if valid_rows:
                 valid_df = pd.DataFrame(valid_rows)
+                # 将ID字段移到首列
+                valid_df = self._move_id_columns_to_front(valid_df)
                 valid_file = os.path.normpath(os.path.join(valid_dir, f"{file_stem}_清洗.csv"))
                 try:
                     valid_df.to_csv(valid_file, index=False, encoding='utf-8-sig')
@@ -233,6 +291,8 @@ class DataCleaner:
                 invalid_df = pd.DataFrame([r[0] for r in invalid_rows])
                 # 添加剔除原因列
                 invalid_df['_剔除原因'] = [r[1] for r in invalid_rows]
+                # 将ID字段移到首列
+                invalid_df = self._move_id_columns_to_front(invalid_df)
                 invalid_file = os.path.normpath(os.path.join(invalid_dir, f"{file_stem}_剔除.csv"))
                 try:
                     invalid_df.to_csv(invalid_file, index=False, encoding='utf-8-sig')
@@ -311,6 +371,14 @@ class DataCleaner:
         
         return ignore_fields
     
+    def _check_field_config(self, df: pd.DataFrame, fields: List[str], file_name: str) -> List[str]:
+        """
+        智能检查字段配置是否合理
+        
+        委托给 FieldConfigChecker 组件处理
+        """
+        return self.config_checker.check(df, fields, file_name)
+    
     def _is_empty_row(self, row: pd.Series, fields: List[str]) -> bool:
         """
         检查是否为空行（所有配置字段为空）
@@ -330,75 +398,22 @@ class DataCleaner:
     
     def _is_pure_region_row(self, text: str) -> bool:
         """
-        检查是否为纯行政区行（只有省市区街道村等，无具体地址）
+        检查是否为纯行政区行
         
-        判断规则：
-        1. 如果包含数字（门牌号等），不是纯行政区
-        2. 如果包含具体地址关键词（小区、超市、公司等），不是纯行政区
-        3. 如果文本较长（>15个中文字符），不是纯行政区
-        4. 只有完全匹配行政区划正则时，才是纯行政区
+        委托给 AddressValidator 组件处理
         
-        Args:
-            text: 清洗后的文本
-            
-        Returns:
-            是否为纯行政区
+        只剔除纯粹的省/市/区级别：xx省、xx市、xx区、xx省xx市等
+        其他所有情况都保留（包括镇、村、街道等）
         """
-        if not text:
-            return False
-        
-        text = text.strip()
-        
-        # 1. 包含数字则不是纯行政区（门牌号、楼号等）
-        if re.search(r'\d', text):
-            return False
-        
-        # 2. 包含具体地址关键词则不是纯行政区
-        for keyword in self.SPECIFIC_ADDRESS_KEYWORDS:
-            if keyword in text:
-                return False
-        
-        # 3. 提取中文字符，如果太长则不是纯行政区
-        chinese_chars = re.findall(r'[\u4e00-\u9fa5]', text)
-        if len(chinese_chars) > 15:
-            return False
-        
-        # 4. 去除空白符号后检查是否完全匹配行政区划正则
-        clean_text = re.sub(r'[^\u4e00-\u9fa5]', '', text)
-        if not clean_text:
-            return True
-        
-        return bool(self.REGION_PATTERN.match(clean_text))
+        return self.validator.is_pure_admin_region(text)
     
     def _sanitize_segment(self, text: str) -> str:
         """
         去除噪声关键字和冗余占位词
         
-        Args:
-            text: 原始文本
-            
-        Returns:
-            清洗后的文本
+        委托给 TextSanitizer 组件处理
         """
-        if not text:
-            return ""
-        
-        result = str(text)
-        
-        # 1. 去除噪声关键字
-        for keyword in self.NOISE_KEYWORDS:
-            result = result.replace(keyword, '')
-        
-        # 2. 去除冗余占位词
-        for word in self.PLACEHOLDER_WORDS:
-            result = result.replace(word, '')
-        
-        # 3. 清理连续的"无"（如 "无无" -> ""，"无1059" -> "1059"）
-        # 匹配 "无" 后面直接跟数字或其他内容的情况
-        result = re.sub(r'无(?=\d)', '', result)  # "无1059" -> "1059"
-        result = re.sub(r'无{2,}', '', result)     # "无无无" -> ""
-        
-        return result.strip()
+        return self.sanitizer.sanitize(text)
     
     def _contains_chinese(self, text: str) -> bool:
         """
@@ -413,6 +428,63 @@ class DataCleaner:
         if not text:
             return False
         return bool(re.search(r'[\u4e00-\u9fa5]', str(text)))
+    
+    def _extract_any_address(self, row: pd.Series) -> str:
+        """
+        从行数据的所有字段中尝试提取地址信息（回退机制）
+        
+        常见地址字段名：location, address, userlocati, housingest 等
+        """
+        address_field_names = [
+            'location', 'address', 'userlocati', 'housingest', 
+            'addr', '地址', '位置', '住址', 'loc'
+        ]
+        
+        for col in row.index:
+            col_lower = str(col).lower()
+            # 检查是否是地址相关字段
+            if any(name in col_lower for name in address_field_names):
+                val = row.get(col)
+                if pd.notna(val):
+                    text = str(val).strip()
+                    # 如果包含中文且长度足够，认为是有效地址
+                    if self._contains_chinese(text) and len(text) > 2:
+                        return self._sanitize_segment(text)
+        
+        return ""
+    
+    def _has_building_info(self, row: pd.Series) -> bool:
+        """
+        检查行数据是否有楼栋/单元/门牌等建筑信息
+        
+        常见字段名：buildingno, houseno, unit, floor 等
+        """
+        building_field_names = [
+            'buildingno', 'houseno', 'unit', 'floor', 'room',
+            '楼', '栋', '单元', '门牌', '房号', '层'
+        ]
+        
+        building_keywords = ['栋', '号', '楼', '单元', '层', '室', '排', '户', '期']
+        
+        for col in row.index:
+            col_lower = str(col).lower()
+            # 检查字段名
+            if any(name in col_lower for name in building_field_names):
+                val = row.get(col)
+                if pd.notna(val):
+                    text = str(val).strip()
+                    if text and text not in ['无', 'nan', 'None', '']:
+                        return True
+            
+            # 检查字段值是否包含建筑关键词
+            val = row.get(col)
+            if pd.notna(val):
+                text = str(val)
+                for kw in building_keywords:
+                    if kw in text:
+                        return True
+        
+        return False
     
     def _build_clean_text(self, row: pd.Series, fields: List[str]) -> str:
         """

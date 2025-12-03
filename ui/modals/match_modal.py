@@ -7,7 +7,7 @@ import pandas as pd
 from typing import List, Dict, Optional, Callable
 from qgis.PyQt.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem,
-    QPushButton, QHeaderView, QGroupBox, QListWidget, QListWidgetItem, QWidget
+    QPushButton, QHeaderView, QGroupBox, QListWidget, QListWidgetItem
 )
 from qgis.PyQt.QtCore import Qt
 from ..widgets.no_wheel_combo_box import NoWheelComboBox
@@ -21,8 +21,7 @@ class MatchModal(QDialog):
         self.setWindowTitle("关联字段配置")
         self.setObjectName("match_modal")
         self.setModal(True)
-        self.resize(900, 550)
-        self.setMinimumSize(800, 450)
+        self.resize(650, 450)
         
         self._global_config = global_config
         self._target_key = ""
@@ -61,43 +60,35 @@ class MatchModal(QDialog):
         # 左：源表字段
         left_box = QGroupBox("源表字段（双击添加）")
         left_box.setObjectName("match_modal_group")
-        left_box.setMinimumWidth(180)
         left_layout = QVBoxLayout(left_box)
-        left_layout.setContentsMargins(8, 12, 8, 8)
+        left_layout.setContentsMargins(6, 10, 6, 6)
         self.source_list = QListWidget()
         self.source_list.setObjectName("match_modal_field_list")
         self.source_list.itemDoubleClicked.connect(self._on_source_double_click)
         left_layout.addWidget(self.source_list)
-        main_layout.addWidget(left_box, 1)
+        main_layout.addWidget(left_box)
         
         # 中：已选关联对
         center_box = QGroupBox("已选关联（值相等则匹配）")
         center_box.setObjectName("match_modal_group")
-        center_box.setMinimumWidth(320)
         center_layout = QVBoxLayout(center_box)
-        center_layout.setContentsMargins(8, 12, 8, 8)
+        center_layout.setContentsMargins(6, 10, 6, 6)
         center_layout.setSpacing(8)
         
         self.pair_table = QTableWidget(0, 4)
         self.pair_table.setObjectName("match_modal_table")
-        self.pair_table.setHorizontalHeaderLabels(["源表字段", "匹配方式", "目标表字段", "操作"])
+        self.pair_table.setHorizontalHeaderLabels(["源表字段", "匹配方式", "目标表字段", ""])
         self.pair_table.verticalHeader().setVisible(False)
-        self.pair_table.verticalHeader().setDefaultSectionSize(38)
+        self.pair_table.verticalHeader().setDefaultSectionSize(36)
         self.pair_table.setAlternatingRowColors(True)
         
         header = self.pair_table.horizontalHeader()
-        header.setStretchLastSection(False)
-        # 源表字段 - 固定宽度
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(0, 120)
-        # 匹配方式 - 固定宽度
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(1, 80)
-        # 目标表字段 - 拉伸填充
+        header.resizeSection(1, 90)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        # 操作 - 固定宽度
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(3, 50)
+        header.resizeSection(3, 40)
         
         center_layout.addWidget(self.pair_table)
         
@@ -107,19 +98,18 @@ class MatchModal(QDialog):
         btn_add.clicked.connect(self._add_pair)
         center_layout.addWidget(btn_add)
         
-        main_layout.addWidget(center_box, 2)
+        main_layout.addWidget(center_box)
         
         # 右：目标表字段
         right_box = QGroupBox("目标表字段（双击添加）")
         right_box.setObjectName("match_modal_group")
-        right_box.setMinimumWidth(180)
         right_layout = QVBoxLayout(right_box)
-        right_layout.setContentsMargins(8, 12, 8, 8)
+        right_layout.setContentsMargins(6, 10, 6, 6)
         self.target_list = QListWidget()
         self.target_list.setObjectName("match_modal_field_list")
         self.target_list.itemDoubleClicked.connect(self._on_target_double_click)
         right_layout.addWidget(self.target_list)
-        main_layout.addWidget(right_box, 1)
+        main_layout.addWidget(right_box)
         
         layout.addLayout(main_layout, 1)
         
@@ -244,15 +234,11 @@ class MatchModal(QDialog):
         
         if not src_item or not tgt_item:
             return
+        if src_item.text().startswith("(") or tgt_item.text().startswith("("):
+            return
         
         src = src_item.text()
         tgt = tgt_item.text()
-        
-        # 检查空值和无效值
-        if not src or not tgt:
-            return
-        if src.startswith("(") or tgt.startswith("("):
-            return
         
         # 检查是否已存在
         if self._pair_exists(src, tgt):
@@ -261,52 +247,28 @@ class MatchModal(QDialog):
         self._add_pair_to_table(src, tgt)
     
     def _on_source_double_click(self, item: QListWidgetItem):
-        """双击源表字段"""
+        """双击源表字段 - 如果右边已选中则直接添加"""
         if item.text().startswith("("):
             return
         
-        src = item.text()
-        tgt = None
-        
-        # 优先使用右边已选中的
         tgt_item = self.target_list.currentItem()
-        if tgt_item and tgt_item.text() and not tgt_item.text().startswith("("):
+        if tgt_item and not tgt_item.text().startswith("("):
+            src = item.text()
             tgt = tgt_item.text()
-        else:
-            # 尝试在右边列表找同名字段
-            for i in range(self.target_list.count()):
-                field = self.target_list.item(i).text()
-                if field == src:
-                    tgt = field
-                    self.target_list.setCurrentRow(i)
-                    break
-        
-        if src and tgt and not self._pair_exists(src, tgt):
-            self._add_pair_to_table(src, tgt)
+            if not self._pair_exists(src, tgt):
+                self._add_pair_to_table(src, tgt)
     
     def _on_target_double_click(self, item: QListWidgetItem):
-        """双击目标表字段"""
+        """双击目标表字段 - 如果左边已选中则直接添加"""
         if item.text().startswith("("):
             return
         
-        tgt = item.text()
-        src = None
-        
-        # 优先使用左边已选中的
         src_item = self.source_list.currentItem()
-        if src_item and src_item.text() and not src_item.text().startswith("("):
+        if src_item and not src_item.text().startswith("("):
             src = src_item.text()
-        else:
-            # 尝试在左边列表找同名字段
-            for i in range(self.source_list.count()):
-                field = self.source_list.item(i).text()
-                if field == tgt:
-                    src = field
-                    self.source_list.setCurrentRow(i)
-                    break
-        
-        if src and tgt and not self._pair_exists(src, tgt):
-            self._add_pair_to_table(src, tgt)
+            tgt = item.text()
+            if not self._pair_exists(src, tgt):
+                self._add_pair_to_table(src, tgt)
     
     def _pair_exists(self, src: str, tgt: str) -> bool:
         """检查字段对是否已存在"""
@@ -320,11 +282,6 @@ class MatchModal(QDialog):
     
     def _add_pair_to_table(self, src: str, tgt: str, match_type: str = "="):
         """添加字段对到表格"""
-        # 检查源和目标都不为空
-        if not src or not tgt:
-            print(f"[MatchModal] 跳过空值: src={src}, tgt={tgt}")
-            return
-        
         row = self.pair_table.rowCount()
         self.pair_table.insertRow(row)
         
@@ -333,20 +290,13 @@ class MatchModal(QDialog):
         src_item.setFlags(src_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.pair_table.setItem(row, 0, src_item)
         
-        # 匹配方式下拉框 - 用容器包装防止溢出
-        combo_container = QWidget()
-        combo_layout = QHBoxLayout(combo_container)
-        combo_layout.setContentsMargins(2, 2, 2, 2)
-        combo_layout.setSpacing(0)
-        
+        # 匹配方式下拉框
         combo_match = NoWheelComboBox()
         combo_match.setEditable(False)
         combo_match.addItems(["=", "LIKE", "包含", "被包含", "前缀", "后缀"])
         combo_match.setCurrentText(match_type)
         combo_match.setToolTip("= 精确匹配\nLIKE 模糊匹配\n包含 源包含目标\n被包含 目标包含源\n前缀 源以目标开头\n后缀 源以目标结尾")
-        combo_layout.addWidget(combo_match)
-        
-        self.pair_table.setCellWidget(row, 1, combo_container)
+        self.pair_table.setCellWidget(row, 1, combo_match)
         
         # 目标表字段
         tgt_item = QTableWidgetItem(tgt)
@@ -380,11 +330,7 @@ class MatchModal(QDialog):
         for row in range(self.pair_table.rowCount()):
             src_item = self.pair_table.item(row, 0)
             tgt_item = self.pair_table.item(row, 2)
-            
-            # 从容器中获取下拉框
-            container = self.pair_table.cellWidget(row, 1)
-            combo_match = container.findChild(NoWheelComboBox) if container else None
-            
+            combo_match = self.pair_table.cellWidget(row, 1)
             if src_item and tgt_item:
                 pairs.append({
                     "src": src_item.text(),

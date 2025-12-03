@@ -20,6 +20,8 @@ from ..collapsible_section import CollapsibleSection
 # 导入core层
 from ...core.data_loader import DataLoader
 from ...core.data_cleaner import DataCleaner
+# 导入后台 Worker
+from ..workers.clean_worker import CleanWorker
 
 
 class Step2Widget(BaseStepWidget):
@@ -47,6 +49,9 @@ class Step2Widget(BaseStepWidget):
         
         # 清洗任务选中的文件列表
         self.clean_selected_files: Dict[str, bool] = {}
+        
+        # 后台清洗 Worker
+        self._clean_worker: Optional[CleanWorker] = None
         
         self._build_ui()
         self._set_expanding_size_policy()
@@ -509,10 +514,10 @@ class Step2Widget(BaseStepWidget):
         exec_row = QHBoxLayout()
         exec_row.setSpacing(12)
         
-        btn_run = QPushButton("执行清洗")
-        btn_run.setObjectName("step2_btn_run_clean")
-        btn_run.clicked.connect(self._run_clean_task)
-        exec_row.addWidget(btn_run)
+        self.btn_clean = QPushButton("执行清洗")
+        self.btn_clean.setObjectName("step2_btn_run_clean")
+        self.btn_clean.clicked.connect(self._run_clean_task)
+        exec_row.addWidget(self.btn_clean)
         
         btn_pause = QPushButton("暂停")
         btn_pause.setObjectName("step2_btn_pause_clean")
@@ -593,7 +598,12 @@ class Step2Widget(BaseStepWidget):
             self.clean_selected_files[file_name] = False
     
     def _run_clean_task(self):
-        """执行清洗任务"""
+        """执行清洗任务（后台线程）"""
+        # 检查是否已有任务在运行
+        if self._clean_worker is not None and self._clean_worker.isRunning():
+            ResultDialog.show_warning(self, "任务进行中", "请等待当前清洗任务完成")
+            return
+        
         # 获取选中的文件
         selected_files = [f for f, selected in self.clean_selected_files.items() if selected]
         
@@ -611,7 +621,26 @@ class Step2Widget(BaseStepWidget):
             ResultDialog.show_warning(self, "配置不完整", f"以下文件尚未配置，无法清洗：\n{', '.join(unconfigured)}")
             return
         
-        # 获取全局配置（省市信息）
+        # === 智能字段配置预检查 ===
+        config_warnings = self._precheck_field_configs(selected_files)
+        if config_warnings:
+            warning_text = "\n".join(config_warnings[:10])
+            if len(config_warnings) > 10:
+                warning_text += f"\n...还有 {len(config_warnings) - 10} 条警告"
+            
+            from qgis.PyQt.QtWidgets import QMessageBox
+            reply = QMessageBox.warning(
+                self,
+                "字段配置可能有问题",
+                f"检测到以下配置问题：\n\n{warning_text}\n\n是否仍要继续清洗？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self._log("[Step2] 用户取消清洗（配置检查未通过）", "info")
+                return
+        
+        # 获取全局配置
         global_config = self._get_global_config()
         if not global_config:
             ResultDialog.show_error(self, "配置错误", "无法获取全局配置")
@@ -627,88 +656,119 @@ class Step2Widget(BaseStepWidget):
             ResultDialog.show_warning(self, "配置缺失", "请先在全局配置中设置省市信息")
             return
         
-        self._log(f"[Step2] 开始清洗任务，共 {len(selected_files)} 个文件")
-        
-        # 创建清洗器
-        cleaner = DataCleaner(log_callback=self._log)
-        
-        # 统计结果
-        total_valid = 0
-        total_invalid = 0
-        success_count = 0
-        fail_count = 0
-        has_permission_error = False
-        
-        # 更新进度条
-        self.bar_clean.setMaximum(len(selected_files))
-        self.bar_clean.setValue(0)
-        
-        for idx, file_name in enumerate(selected_files):
-            # 更新状态
-            self.lbl_clean.setText(f"正在清洗：{file_name}")
-            self.bar_clean.setValue(idx)
-            
-            # 处理Qt事件，保持UI响应
-            from qgis.PyQt.QtWidgets import QApplication
-            QApplication.processEvents()
-            
-            # 获取文件配置
+        # 准备文件列表
+        files_to_clean = []
+        for file_name in selected_files:
             file_info = self.file_configs.get(file_name, {})
             file_path = file_info.get('saved_path', '')
             source_type = file_info.get('source_type', '其他')
             
             if not file_path or not os.path.exists(file_path):
                 self._log(f"[Step2] 文件不存在：{file_name}", "error")
-                fail_count += 1
                 continue
             
-            # 获取字段组合配置
             combo = self.file_combo_configs.get(file_name)
             if not combo or not combo.get('fields'):
                 self._log(f"[Step2] 未找到字段配置：{file_name}", "error")
-                fail_count += 1
                 continue
             
-            # 输出目录使用用户基目录（符合文档设计）
-            output_dir = base_folder
-            
-            # 执行清洗
-            result = cleaner.clean_file(
-                file_path=file_path,
-                field_config=combo['fields'],
-                output_dir=output_dir,
-                province=province,
-                city=city,
-                county=county,
-                source_type=source_type
-            )
-            
-            if result['success']:
-                success_count += 1
-                total_valid += result['valid_count']
-                total_invalid += result['invalid_count']
-                
-                # 更新文件清洗状态（Step2 和 Step1 同步）
+            files_to_clean.append({
+                'file_name': file_name,
+                'file_path': file_path,
+                'source_type': source_type,
+                'field_config': combo['fields']
+            })
+        
+        if not files_to_clean:
+            ResultDialog.show_warning(self, "无有效文件", "所选文件均无法处理")
+            return
+        
+        self._log(f"[Step2] 开始后台清洗任务，共 {len(files_to_clean)} 个文件", "info")
+        
+        # 禁用按钮
+        self.btn_clean.setEnabled(False)
+        self.btn_clean.setText("清洗中...")
+        self.bar_clean.setMaximum(len(files_to_clean))
+        self.bar_clean.setValue(0)
+        self.lbl_clean.setText("正在初始化...")
+        
+        # 创建清洗器
+        cleaner = DataCleaner()
+        
+        # 创建并启动 Worker
+        self._clean_worker = CleanWorker(
+            files=files_to_clean,
+            cleaner=cleaner,
+            output_dir=base_folder,
+            province=province,
+            city=city,
+            county=county,
+            parent=self
+        )
+        
+        # 连接信号
+        self._clean_worker.progress.connect(self._on_clean_progress)
+        self._clean_worker.log.connect(self._log)
+        self._clean_worker.file_completed.connect(self._on_file_cleaned)
+        self._clean_worker.finished.connect(self._on_clean_finished)
+        self._clean_worker.error.connect(self._on_clean_error)
+        
+        # 启动
+        self._clean_worker.start()
+    
+    def _on_clean_progress(self, current: int, total: int, message: str):
+        """清洗进度更新"""
+        self.bar_clean.setMaximum(total)
+        self.bar_clean.setValue(current)
+        self.lbl_clean.setText(message)
+    
+    def _on_file_cleaned(self, file_name: str, result: dict):
+        """单个文件清洗完成"""
+        if result.get('success'):
+            # 更新文件清洗状态
+            if file_name in self.file_configs:
                 self.file_configs[file_name]['cleaned'] = '已清洗'
                 self._update_step1_cleaned_status(file_name, '已清洗')
-            else:
-                fail_count += 1
-                # 记录是否有文件占用错误
-                if result.get('has_permission_error'):
-                    has_permission_error = True
-                self._log(f"[Step2] 清洗失败 {file_name}：{result.get('error', '未知错误')}", "error")
+    
+    def _on_clean_finished(self, summary: dict):
+        """清洗任务完成"""
+        # 恢复按钮
+        self.btn_clean.setEnabled(True)
+        self.btn_clean.setText("执行清洗")
         
-        # 完成
-        self.bar_clean.setValue(len(selected_files))
+        if summary.get('cancelled'):
+            self.lbl_clean.setText("已取消")
+            self._log("[Step2] 清洗任务已取消", "warning")
+            self._clean_worker = None
+            return
+        
+        # 更新进度
+        success_count = summary.get('success_count', 0)
+        fail_count = summary.get('fail_count', 0)
+        total_valid = summary.get('total_valid', 0)
+        total_invalid = summary.get('total_invalid', 0)
+        has_permission_error = summary.get('has_permission_error', False)
+        
+        self.bar_clean.setValue(self.bar_clean.maximum())
         self.lbl_clean.setText(f"完成：成功{success_count}个，失败{fail_count}个")
         
-        # 刷新清洗任务列表（更新清洗状态显示）
+        # 刷新清洗任务列表
         self._refresh_clean_task_list()
         
         # 显示结果对话框
         self._show_clean_result_dialog(success_count, fail_count, total_valid, total_invalid, has_permission_error)
         
-        self._log(f"[Step2] 清洗任务完成：成功{success_count}个，失败{fail_count}个，有效{total_valid}条，剔除{total_invalid}条", "success")
+        # 清理 Worker
+        self._clean_worker = None
+    
+    def _on_clean_error(self, error_msg: str):
+        """清洗任务出错"""
+        self.btn_clean.setEnabled(True)
+        self.btn_clean.setText("执行清洗")
+        self.lbl_clean.setText("出错")
+        self._log(f"[Step2] {error_msg}", "error")
+        ResultDialog.show_error(self, "清洗出错", error_msg[:500])
+        self._clean_worker = None
     
     def _show_clean_result_dialog(self, success_count: int, fail_count: int, total_valid: int, total_invalid: int, has_permission_error: bool):
         """显示清洗结果对话框"""
@@ -1011,7 +1071,7 @@ class Step2Widget(BaseStepWidget):
             # 格式：文件名 [已配置 3字段] 或 文件名 [未配置]
             if configured == "已配置":
                 display_text = f"{file_name}  [已配置 {field_count}字段]"
-            else:
+        else:
                 display_text = f"{file_name}  [未配置]"
             
             self.file_select_combo.addItem(display_text, file_name)
@@ -1032,6 +1092,69 @@ class Step2Widget(BaseStepWidget):
             self._load_file_combo_config(first_file)
         
         self.file_select_combo.blockSignals(False)
+    
+    def _precheck_field_configs(self, selected_files: List[str]) -> List[str]:
+        """
+        预检查字段配置是否合理
+        
+        返回警告信息列表
+        """
+        import re
+        warnings = []
+        
+        # 常见的非地址字段名
+        NON_ADDRESS_FIELDS = {
+            'crs', 'epsg', 'geometry', 'gid', 'guid', 'id', 'code', 'dno',
+            'angle', 'xcoordinat', 'ycoordinat', 'x', 'y', 'lat', 'lng', 'lon',
+            'crttime', 'modtime', 'crtuser', 'moduser', 'data_type',
+            'groundelev', 'pipetopele', 'burieddept'
+        }
+        
+        for file_name in selected_files:
+            combo_config = self.file_combo_configs.get(file_name, {})
+            fields_config = combo_config.get('fields', [])
+            
+            if not fields_config:
+                warnings.append(f"⚠️ {file_name}: 未配置任何字段")
+                continue
+            
+            field_names = [f.get('field', '') for f in fields_config if f.get('field')]
+            
+            # 检查是否配置了非地址字段
+            bad_fields = [f for f in field_names if f.lower() in NON_ADDRESS_FIELDS]
+            if bad_fields:
+                warnings.append(f"❌ {file_name}: 配置了非地址字段 [{', '.join(bad_fields)}]")
+            
+            # 检查字段内容是否包含中文
+            columns = self.file_columns_cache.get(file_name, [])
+            if columns and field_names:
+                # 尝试读取文件样本检查
+                file_config = self.file_configs.get(file_name, {})
+                file_path = file_config.get('saved_path', '')
+                
+                if file_path and os.path.exists(file_path):
+                    try:
+                        import pandas as pd
+                        df_sample = pd.read_csv(file_path, encoding='utf-8', nrows=10)
+                        
+                        no_chinese_fields = []
+                        for field in field_names:
+                            if field in df_sample.columns:
+                                sample_values = df_sample[field].dropna().astype(str)
+                                has_chinese = any(
+                                    bool(re.search(r'[\u4e00-\u9fa5]', str(v)))
+                                    for v in sample_values
+                                )
+                                if not has_chinese and len(sample_values) > 0:
+                                    sample = str(sample_values.iloc[0])[:20]
+                                    no_chinese_fields.append(f"{field}={sample}")
+                        
+                        if no_chinese_fields:
+                            warnings.append(f"⚠️ {file_name}: 字段不含中文 [{', '.join(no_chinese_fields)}]")
+                    except Exception:
+                        pass
+        
+        return warnings
     
     def _get_global_config(self):
         """获取全局配置"""

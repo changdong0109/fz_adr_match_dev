@@ -17,20 +17,48 @@ logger = logging.getLogger("ali_address")
 
 
 class RateLimiter:
-    """请求限速器"""
+    """请求限速器 - 令牌桶算法
     
-    def __init__(self, qps: int):
-        self.interval = 1.0 / max(qps, 1)
+    优化点：
+    1. 使用令牌桶算法，允许突发请求
+    2. 充分利用 QPS 配额，减少不必要的等待
+    """
+    
+    def __init__(self, qps: int, burst: int = 3):
+        """
+        Args:
+            qps: 每秒请求数限制
+            burst: 允许的突发请求数
+        """
+        self.qps = max(qps, 1)
+        self.interval = 1.0 / self.qps
+        self.burst = burst
         self.lock = threading.Lock()
-        self.next_time = time.monotonic()
+        self.tokens = float(burst)  # 令牌桶
+        self.last_time = time.monotonic()
     
     def acquire(self):
+        """获取请求许可"""
         with self.lock:
             now = time.monotonic()
-            wait = max(0.0, self.next_time - now)
-            self.next_time = max(now, self.next_time) + self.interval
-        if wait:
+            # 补充令牌
+            elapsed = now - self.last_time
+            self.tokens = min(self.burst, self.tokens + elapsed * self.qps)
+            self.last_time = now
+            
+            if self.tokens >= 1:
+                # 有令牌，立即放行
+                self.tokens -= 1
+                return
+            
+            # 无令牌，计算等待时间
+            wait = (1 - self.tokens) / self.qps
+        
+        if wait > 0:
             time.sleep(wait)
+            with self.lock:
+                self.tokens = 0
+                self.last_time = time.monotonic()
 
 
 class AliAddressParser:
@@ -289,11 +317,14 @@ class AliAddressParser:
                     poi_predict = inner.get("poi_predict", "") or ""
                     self._log(f"[API] PredictPOI 结果: {poi_predict}", "debug")
                     return poi_predict
+                # 成功但无 POI，返回空字符串
+                return ""
             except Exception as e:
                 self._log(f"[API] 解析 PredictPOI 响应失败: {e}", "debug")
-                pass
+                return None  # 解析失败，返回 None
         
-        return ""
+        # API 调用失败，返回 None（不是空字符串）
+        return None
     
     def parse(self, text: str) -> Dict[str, Any]:
         """
@@ -339,12 +370,13 @@ class AliAddressParser:
             if text in self._structure_cache:
                 st = self._structure_cache[text]
                 structure_cached = True
-                self._log(f"[API] StructureAddress 缓存命中: {text[:20]}...", "debug")
+                self._log(f"[API] StructureAddress [缓存命中]: {text[:30]}...", "info")
             else:
                 st = None
         
         # 如果缓存未命中，调用 StructureAddress API
         if st is None:
+            self._log(f"[API] StructureAddress [调用API]: {text[:30]}...", "info")
             st = self.structure_address(text)
             
             # 确保 st 是字典
@@ -352,10 +384,13 @@ class AliAddressParser:
                 self._log(f"[API] StructureAddress 返回非字典类型: {type(st)}, 值: {st}", "warning")
                 st = {}
             
-            # 保存到 StructureAddress 缓存
-            with self._cache_lock:
-                self._structure_cache[text] = st
-                self._cache_dirty_count += 1
+            # 只有成功返回（非空字典）才保存到缓存
+            if st:
+                with self._cache_lock:
+                    self._structure_cache[text] = st
+                    self._cache_dirty_count += 1
+            else:
+                self._log(f"[API] StructureAddress 返回空，不缓存: {text[:30]}...", "warning")
         
         # 2. 提取各个字段（阿里云 API 字段名映射）
         province = st.get("prov", "") or st.get("province", "") or ""
@@ -392,21 +427,27 @@ class AliAddressParser:
                     poi_cached = True
                     if predict_poi:
                         predict_poi_source = "predict"
-                    self._log(f"[API] PredictPOI 缓存命中: {std_address[:20]}...", "debug")
+                    self._log(f"[API] PredictPOI [缓存命中]: {std_address[:30]}...", "info")
                 else:
                     predict_poi = None
             
             # 如果缓存未命中，调用 PredictPOI API
             if predict_poi is None:
+                self._log(f"[API] PredictPOI [调用API]: {std_address[:30]}...", "info")
                 predict_poi = self.predict_poi(std_address)
                 
-                # 保存到 PredictPOI 缓存
-                with self._cache_lock:
-                    self._poi_cache[std_address] = predict_poi or ""
-                    self._cache_dirty_count += 1
-                
-                if predict_poi:
-                    predict_poi_source = "predict"
+                # 只有 API 成功（返回非 None）才保存到缓存
+                # None 表示 API 失败，空字符串表示成功但无 POI
+                if predict_poi is not None:
+                    with self._cache_lock:
+                        self._poi_cache[std_address] = predict_poi
+                        self._cache_dirty_count += 1
+                    
+                    if predict_poi:
+                        predict_poi_source = "predict"
+                else:
+                    self._log(f"[API] PredictPOI 调用失败，不缓存: {std_address[:30]}...", "warning")
+                    predict_poi = ""  # 失败时设为空字符串，不影响后续逻辑
             
             # 如果预测为空，使用结构化返回的 POI
             if not predict_poi and poi:

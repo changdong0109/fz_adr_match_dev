@@ -1299,9 +1299,17 @@ def load_xxx(file_path: str) -> List[Dict]:
 - [x] 临时文件已清理
 
 #### 5. Core层实现 ✅
-- [x] `core/data_loader.py` - 数据加载（CSV/Excel/SHP等）和格式转换（支持保存为CSV）
+- [x] `core/data_loader.py` - 数据加载（CSV/Excel/SHP等）和格式转换
 - [x] `core/field_detector.py` - 字段检测与关联推断
-- [x] `core/match_engine.py` - 匹配算法（精准/模糊/组合）
+- [x] `core/data_cleaner.py` - 数据清洗
+- [x] `core/ali_address_parser.py` - 阿里云地址解析（StructureAddress + PredictPOI）
+- [x] `core/poi_utils.py` - POI公共工具函数
+- [x] `core/poi_matcher.py` - V11 POI匹配引擎（RapidFuzz + SentenceTransformer）
+- [x] `core/match_executor.py` - 匹配任务执行器 + 任务持久化管理
+- [x] `core/export_manager.py` - 导出管理器
+- [x] `core/field_relation.py` - 字段关联分析
+- [x] `core/match_engine.py` - 旧匹配引擎（已弃用，保留向后兼容）
+- [x] `core/address_matcher.py` - 旧地址匹配器（已弃用，保留向后兼容）
 
 #### 6. 样式管理 ✅
 - [x] `ui/styles.qss` - 统一管理所有样式
@@ -1359,10 +1367,12 @@ def load_xxx(file_path: str) -> List[Dict]:
   - 修正文件夹命名规则，统一为：`xx省xx市xx县客户数据`、`xx省xx市xx县shp数据`、`xx省xx市xx县cache数据`
   - 确保县为可选时，目录名正确处理（无县时：`xx省xx市客户数据`）
   - 更新提示文本以反映新的目录命名规则
-- [ ] **后台线程化**: 将清洗/匹配操作迁移到后台 QThread，避免UI卡顿
-- [ ] **配置保存/加载**: 添加匹配配置的保存和加载功能
+- [x] **配置保存/加载**: ✅ 已完成 - 任务组配置自动持久化到 cache/match_tasks.json
+- [x] **高级匹配算法**: ✅ 已完成 - V11 POI匹配引擎（RapidFuzz + SentenceTransformer）
+- [x] **Step4 执行功能**: ✅ 已完成 - 调用 MatchExecutor 执行匹配任务
+- [x] **Step5 导出功能**: ✅ 已完成 - 调用 ExportManager 导出各类结果
+- [ ] **后台线程化**: 将匹配操作迁移到后台 QThread，避免UI卡顿（大数据时推荐）
 - [ ] **地图可视化**: 在 QGIS 画布添加临时内存图层显示匹配结果
-- [ ] **高级匹配算法**: 接入更复杂的相似度度量（当前为基础 difflib）
 - [ ] **地址标准化规则配置化**: 将硬编码的标准化规则改为配置文件驱动
 
 ### 代码质量

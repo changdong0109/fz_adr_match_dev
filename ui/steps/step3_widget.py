@@ -107,6 +107,7 @@ class Step3Widget(BaseStepWidget):
         self.parse_file_list: Optional[QListWidget] = None
         self.parse_selected_files: Dict[str, bool] = {}
         self._is_running = False  # 防止重复执行
+        self._task_signals = None  # QGIS 任务信号
         super().__init__(parent, log_callback, task_manager)
         self._build_ui()
         self._set_expanding_size_policy()
@@ -305,10 +306,10 @@ class Step3Widget(BaseStepWidget):
         btn_clear.clicked.connect(self._show_clear_dialog)
         btn_row.addWidget(btn_clear)
         
-        btn_run = QPushButton("开始解析")
-        btn_run.setObjectName("step3_btn_run")
-        btn_run.clicked.connect(self._run_parse_task)
-        btn_row.addWidget(btn_run)
+        self.btn_parse = QPushButton("开始解析")
+        self.btn_parse.setObjectName("step3_btn_run")
+        self.btn_parse.clicked.connect(self._run_parse_task)
+        btn_row.addWidget(self.btn_parse)
         
         v.addLayout(btn_row)
         
@@ -1005,8 +1006,8 @@ class Step3Widget(BaseStepWidget):
         # 按钮行1：导出关联数据
         btn_row1 = QHBoxLayout()
         
-        btn_export = QPushButton("📥 导出关联数据 (INNER JOIN)")
-        btn_export.setObjectName("relation_detail_btn_export")
+        btn_export = QPushButton("导出关联数据 (INNER JOIN)")
+        btn_export.setObjectName("step3_btn_export_join")
         btn_export.setToolTip(f"导出 {file_a} 和 {file_b} 关联上的数据")
         btn_export.clicked.connect(lambda: self._export_joined_data(rel, dialog, 'inner'))
         btn_row1.addWidget(btn_export)
@@ -1016,14 +1017,14 @@ class Step3Widget(BaseStepWidget):
         # 按钮行2：导出未关联数据
         btn_row2 = QHBoxLayout()
         
-        btn_export_a_only = QPushButton(f"📤 导出 {file_a_short} 未关联数据")
-        btn_export_a_only.setObjectName("relation_detail_btn_export_unmatched")
+        btn_export_a_only = QPushButton(f"导出 {file_a_short} 未关联数据")
+        btn_export_a_only.setObjectName("step3_btn_export_unmatched")
         btn_export_a_only.setToolTip(f"导出 {file_a} 中没有匹配到 {file_b} 的数据")
         btn_export_a_only.clicked.connect(lambda: self._export_joined_data(rel, dialog, 'left_only'))
         btn_row2.addWidget(btn_export_a_only)
         
-        btn_export_b_only = QPushButton(f"📤 导出 {file_b_short} 未关联数据")
-        btn_export_b_only.setObjectName("relation_detail_btn_export_unmatched")
+        btn_export_b_only = QPushButton(f"导出 {file_b_short} 未关联数据")
+        btn_export_b_only.setObjectName("step3_btn_export_unmatched")
         btn_export_b_only.setToolTip(f"导出 {file_b} 中没有匹配到 {file_a} 的数据")
         btn_export_b_only.clicked.connect(lambda: self._export_joined_data(rel, dialog, 'right_only'))
         btn_row2.addWidget(btn_export_b_only)
@@ -1035,7 +1036,7 @@ class Step3Widget(BaseStepWidget):
         btn_row3 = QHBoxLayout()
         btn_row3.addStretch()
         btn_close = QPushButton("关闭")
-        btn_close.setObjectName("relation_detail_btn_close")
+        btn_close.setObjectName("step3_btn_close")
         btn_close.clicked.connect(dialog.accept)
         btn_row3.addWidget(btn_close)
         layout.addLayout(btn_row3)
@@ -1044,7 +1045,7 @@ class Step3Widget(BaseStepWidget):
     
     def _export_joined_data(self, rel: Dict[str, Any], parent_dialog: Any, join_type: str = 'inner'):
         """
-        导出两个表的关联/未关联数据（调用 Core 层 RelationExporter）
+        导出两个表的关联/未关联数据（后台线程执行）
         
         Args:
             rel: 关联信息
@@ -1053,8 +1054,9 @@ class Step3Widget(BaseStepWidget):
         """
         import os
         from ..widgets.result_dialog import ResultDialog
-        from qgis.PyQt.QtWidgets import QFileDialog
+        from qgis.PyQt.QtWidgets import QFileDialog, QProgressDialog
         from ...core.field_relation import RelationExporter
+        from ..workers.relation_export_worker import RelationExportWorker
         
         field_a = rel['field_a']
         field_b = rel['field_b']
@@ -1101,10 +1103,10 @@ class Step3Widget(BaseStepWidget):
         file_b_short = file_b.replace('.csv', '').replace('.xlsx', '')
         
         # 根据导出类型设置文件名和对话框标题
-        if join_type == RelationExporter.JOIN_INNER:
+        if join_type == RelationExporter.JOIN_INNER or join_type == 'inner':
             default_name = f"关联结果_{file_a_short}_{file_b_short}.xlsx"
             dialog_title = "导出关联数据"
-        elif join_type == RelationExporter.JOIN_LEFT_ONLY:
+        elif join_type == RelationExporter.JOIN_LEFT_ONLY or join_type == 'left_only':
             default_name = f"未关联数据_{file_a_short}.xlsx"
             dialog_title = f"导出 {file_a_short} 未关联数据"
         else:  # right_only
@@ -1124,7 +1126,89 @@ class Step3Widget(BaseStepWidget):
         if not output_path:
             return  # 用户取消
         
-        # 调用 Core 层执行导出（业务逻辑在 Core 层）
+        # 大数据量优化：超过 5 万行强制使用 CSV
+        # 检查预估行数（如果可以的话）
+        use_csv_for_large = output_path.lower().endswith('.xlsx')
+        
+        # 创建进度对话框（使用项目统一样式）
+        from ..widgets.progress_dialog import ProgressDialog
+        progress_dialog = ProgressDialog(
+            parent_dialog, 
+            "导出关联数据", 
+            "正在准备...",
+            cancelable=True
+        )
+        
+        # 创建导出器和 Worker
+        exporter = RelationExporter(log_callback=None)  # 日志通过 Worker 发送
+        
+        self._relation_export_worker = RelationExportWorker(
+            exporter=exporter,
+            path_a=path_a,
+            path_b=path_b,
+            col_a=col_a,
+            col_b=col_b,
+            output_path=output_path,
+            join_type=join_type if join_type in ['inner', 'left_only', 'right_only'] else 'inner',
+            parent=self
+        )
+        
+        # 连接信号 (progress 信号: current, total, message)
+        self._relation_export_worker.progress.connect(
+            lambda current, total, msg: progress_dialog.set_progress(current, msg)
+        )
+        self._relation_export_worker.log.connect(self._log)
+        self._relation_export_worker.finished.connect(
+            lambda result: self._on_relation_export_finished(result, parent_dialog, rel, cache_folder, progress_dialog)
+        )
+        self._relation_export_worker.error.connect(
+            lambda err: self._on_relation_export_error(err, parent_dialog, progress_dialog)
+        )
+        
+        # 取消按钮
+        progress_dialog.on_cancel = self._relation_export_worker.cancel
+        
+        # 启动
+        self._relation_export_worker.start()
+        progress_dialog.exec()
+    
+    def _on_relation_export_finished(self, result: dict, parent_dialog, rel, cache_folder, progress_dialog):
+        """关联导出完成"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        progress_dialog.close()
+        self._relation_export_worker = None
+        
+        if result.get('cancelled'):
+            self._log("[关联导出] 已取消", "warning")
+            return
+        
+        if result.get('row_count', 0) > 0:
+            self._save_join_metadata(rel, result['output_path'], result['row_count'], cache_folder)
+            ResultDialog.show_success(
+                parent_dialog,
+                "导出成功",
+                f"{result['message']}\n\n保存位置:\n{result['output_path']}"
+            )
+        else:
+            ResultDialog.show_warning(parent_dialog, "无数据", result.get('message', '没有匹配的数据'))
+    
+    def _on_relation_export_error(self, error_msg: str, parent_dialog, progress_dialog):
+        """关联导出出错"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        progress_dialog.close()
+        self._relation_export_worker = None
+        self._log(f"[关联导出] 出错: {error_msg}", "error")
+        ResultDialog.show_error(parent_dialog, "导出失败", error_msg[:500])
+    
+    def _export_joined_data_sync(self, rel: Dict[str, Any], parent_dialog: Any, join_type: str, 
+                                  path_a: str, path_b: str, col_a: str, col_b: str, 
+                                  output_path: str, cache_folder: str):
+        """同步导出（备用，不推荐）"""
+        from ..widgets.result_dialog import ResultDialog
+        from ...core.field_relation import RelationExporter
+        
         exporter = RelationExporter(log_callback=self._log)
         result = exporter.export(
             path_a=path_a,
@@ -1692,8 +1776,8 @@ class Step3Widget(BaseStepWidget):
         # 按钮行1：导出关联数据
         btn_row1 = QHBoxLayout()
         
-        btn_export = QPushButton("📥 导出关联数据 (INNER JOIN)")
-        btn_export.setObjectName("relation_detail_btn_export")
+        btn_export = QPushButton("导出关联数据 (INNER JOIN)")
+        btn_export.setObjectName("step3_btn_export_join")
         btn_export.clicked.connect(lambda: self._export_joined_data(rel, dialog, RelationExporter.JOIN_INNER))
         btn_row1.addWidget(btn_export)
         btn_row1.addStretch()
@@ -1702,13 +1786,13 @@ class Step3Widget(BaseStepWidget):
         # 按钮行2：导出未关联数据
         btn_row2 = QHBoxLayout()
         
-        btn_export_a_only = QPushButton(f"📤 导出 {file_a_short} 未关联数据")
-        btn_export_a_only.setObjectName("relation_detail_btn_export_unmatched")
+        btn_export_a_only = QPushButton(f"导出 {file_a_short} 未关联数据")
+        btn_export_a_only.setObjectName("step3_btn_export_unmatched")
         btn_export_a_only.clicked.connect(lambda: self._export_joined_data(rel, dialog, RelationExporter.JOIN_LEFT_ONLY))
         btn_row2.addWidget(btn_export_a_only)
         
-        btn_export_b_only = QPushButton(f"📤 导出 {file_b_short} 未关联数据")
-        btn_export_b_only.setObjectName("relation_detail_btn_export_unmatched")
+        btn_export_b_only = QPushButton(f"导出 {file_b_short} 未关联数据")
+        btn_export_b_only.setObjectName("step3_btn_export_unmatched")
         btn_export_b_only.clicked.connect(lambda: self._export_joined_data(rel, dialog, RelationExporter.JOIN_RIGHT_ONLY))
         btn_row2.addWidget(btn_export_b_only)
         
@@ -1719,7 +1803,7 @@ class Step3Widget(BaseStepWidget):
         btn_row3 = QHBoxLayout()
         btn_row3.addStretch()
         btn_close = QPushButton("关闭")
-        btn_close.setObjectName("relation_detail_btn_close")
+        btn_close.setObjectName("step3_btn_close")
         btn_close.clicked.connect(dialog.accept)
         btn_row3.addWidget(btn_close)
         layout.addLayout(btn_row3)
@@ -2042,24 +2126,15 @@ class Step3Widget(BaseStepWidget):
         self.parse_file_list.blockSignals(False)
     
     def _run_parse_task(self):
-        """执行解析任务"""
+        """执行解析任务（后台线程）"""
         from ..widgets.result_dialog import ResultDialog
-        import pandas as pd
+        from ..workers.parse_worker import ParseWorker
         
-        # 防止重复执行
-        if self._is_running:
-            self._log("[Step3] 任务正在执行中，请等待完成", "warning")
+        # 检查是否已有任务在运行
+        if hasattr(self, '_parse_worker') and self._parse_worker is not None and self._parse_worker.isRunning():
+            ResultDialog.show_warning(self, "任务进行中", "请等待当前解析任务完成")
             return
         
-        self._is_running = True
-        
-        try:
-            self._do_parse_task(ResultDialog, pd)
-        finally:
-            self._is_running = False
-    
-    def _do_parse_task(self, ResultDialog, pd):
-        """实际执行解析任务"""
         # 获取选中的文件
         selected_files = []
         for i in range(self.parse_file_list.count()):
@@ -2105,11 +2180,11 @@ class Step3Widget(BaseStepWidget):
             city = region_info.get('city', '')
             cache_folder = region_info.get('cache_folder', '')
         
-        self._log(f"[Step3] 开始解析 {len(selected_files)} 个文件", "info")
+        self._log(f"[Step3] 开始后台解析任务，共 {len(selected_files)} 个文件", "info")
         if test_limit:
             self._log(f"[Step3] 测试模式：每个文件最多处理 {test_limit} 条", "info")
         
-        # 创建解析器
+        # 创建解析器（不传入 log_callback，避免后台线程直接操作 UI）
         try:
             from ...core.ali_address_parser import AliAddressParser
             
@@ -2120,123 +2195,108 @@ class Step3Widget(BaseStepWidget):
                 default_province=province,
                 default_city=city,
                 cache_folder=cache_folder,
-                log_callback=self._log
+                log_callback=None  # 日志通过 Worker 信号发送
             )
         except Exception as e:
             self._log(f"[Step3] 创建解析器失败: {e}", "error")
             ResultDialog.show_error(self, "初始化失败", str(e))
             return
         
-        # 执行解析
-        total_success = 0
-        total_fail = 0
-        total_cached = 0
+        # 禁用按钮
+        self.btn_parse.setEnabled(False)
+        self.btn_parse.setText("解析中...")
+        self.parse_progress.setValue(0)
+        self.parse_progress.setMaximum(len(selected_files))
+        self.lbl_parse_status.setText("正在初始化...")
         
-        for file_idx, file_path in enumerate(selected_files):
-            file_name = os.path.basename(file_path)
-            self.lbl_parse_status.setText(f"正在解析: {file_name} ({file_idx + 1}/{len(selected_files)})")
-            self._log(f"[Step3] 开始解析文件: {file_name}", "info")
-            
-            try:
-                # 读取 CSV
-                df = pd.read_csv(file_path, encoding='utf-8-sig')
-                
-                # 查找清洗后的地址列（以 _adr_clean 结尾）
-                adr_clean_cols = [col for col in df.columns if col.endswith('_adr_clean')]
-                if not adr_clean_cols:
-                    self._log(f"[Step3] 文件 {file_name} 未找到清洗后的地址列（*_adr_clean）", "warning")
-                    total_fail += 1
-                    continue
-                
-                adr_col = adr_clean_cols[0]
-                self._log(f"[Step3] 使用地址列: {adr_col}", "info")
-                
-                # 限制处理数量
-                if test_limit and len(df) > test_limit:
-                    df = df.head(test_limit)
-                    self._log(f"[Step3] 测试模式：只处理前 {test_limit} 条", "info")
-                
-                total_rows = len(df)
-                self.parse_progress.setValue(0)
-                self.parse_progress.setMaximum(total_rows)
-                
-                # 只新增两个关键字段
-                df['标准化地址'] = ""
-                df['标准化POI抽取'] = ""
-                
-                file_cached = 0
-                
-                # 逐行解析
-                for idx, row in df.iterrows():
-                    address = str(row.get(adr_col, "")).strip()
-                    
-                    if not address:
-                        continue
-                    
-                    # 调用解析（内部会缓存所有结构化字段）
-                    result = parser.parse(address)
-                    
-                    # 只填充两个关键字段
-                    df.at[idx, '标准化地址'] = result.get('std_address', '')
-                    df.at[idx, '标准化POI抽取'] = result.get('predict_poi', '')
-                    
-                    if result.get("cached"):
-                        file_cached += 1
-                    
-                    # 更新进度
-                    self.parse_progress.setValue(idx + 1)
-                    
-                    # 处理事件，保持 UI 响应
-                    from qgis.PyQt.QtWidgets import QApplication
-                    QApplication.processEvents()
-                
-                # 保存结果
-                output_dir = os.path.dirname(file_path)
-                output_name = os.path.splitext(file_name)[0] + "_标准化.csv"
-                output_path = os.path.join(output_dir, output_name)
-                
-                df.to_csv(output_path, index=False, encoding='utf-8-sig')
-                
-                self._log(f"[Step3] 文件 {file_name} 解析完成，缓存命中 {file_cached} 条", "success")
-                self._log(f"[Step3] 结果已保存: {output_path}", "info")
-                
-                # 更新解析状态
-                self._save_parse_status(file_name, {
-                    "parsed": True,
-                    "parse_time": pd.Timestamp.now().isoformat(),
-                    "total_rows": total_rows,
-                    "cached_rows": file_cached
-                })
-                
-                total_success += 1
-                total_cached += file_cached
-                
-            except Exception as e:
-                self._log(f"[Step3] 解析文件 {file_name} 失败: {e}", "error")
-                total_fail += 1
+        # 创建并启动 Worker
+        self._parse_worker = ParseWorker(
+            files=selected_files,
+            parser=parser,
+            test_limit=test_limit,
+            parent=self
+        )
         
-        # 保存缓存到磁盘
-        parser.flush_cache()
+        # 连接信号
+        self._parse_worker.progress.connect(self._on_parse_progress)
+        self._parse_worker.log.connect(self._log)
+        self._parse_worker.file_completed.connect(self._on_parse_file_completed)
+        self._parse_worker.finished.connect(self._on_parse_finished)
+        self._parse_worker.error.connect(self._on_parse_error)
+        
+        # 启动
+        self._parse_worker.start()
+    
+    def _on_parse_progress(self, current: int, total: int, message: str):
+        """解析进度更新"""
+        self.parse_progress.setMaximum(total)
+        self.parse_progress.setValue(current)
+        self.lbl_parse_status.setText(message)
+    
+    def _on_parse_file_completed(self, file_name: str, result: dict):
+        """单个文件解析完成"""
+        import pandas as pd
+        if result.get('success'):
+            self._save_parse_status(file_name, {
+                "parsed": True,
+                "parse_time": pd.Timestamp.now().isoformat(),
+                "total_rows": result.get('rows', 0),
+                "cached_rows": result.get('cached', 0)
+            })
+    
+    def _on_parse_finished(self, result: dict):
+        """解析任务完成"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        # 恢复按钮
+        self.btn_parse.setEnabled(True)
+        self.btn_parse.setText("开始解析")
+        
+        if result.get('cancelled'):
+            self.lbl_parse_status.setText("已取消")
+            self._log("[Step3] 解析任务已取消", "warning")
+            self._parse_worker = None
+            return
+        
+        success_count = result.get('success_count', 0)
+        fail_count = result.get('fail_count', 0)
+        total_cached = result.get('total_cached', 0)
+        
+        self.parse_progress.setValue(self.parse_progress.maximum())
+        self.lbl_parse_status.setText("解析完成")
         
         # 刷新文件列表
         self._refresh_parse_file_list()
         
         # 显示结果
-        self.lbl_parse_status.setText("解析完成")
-        self.parse_progress.setValue(self.parse_progress.maximum())
-        
-        if total_fail == 0:
+        if fail_count == 0:
             ResultDialog.show_success(
                 self, "解析完成",
-                f"成功解析 {total_success} 个文件",
+                f"成功解析 {success_count} 个文件",
                 detail=f"💡 缓存命中 {total_cached} 条，节省了 API 调用费用"
             )
         else:
             ResultDialog.show_warning(
                 self, "部分完成",
-                f"成功: {total_success} 个，失败: {total_fail} 个",
+                f"成功: {success_count} 个，失败: {fail_count} 个",
                 detail="请查看日志了解失败原因"
             )
+        
+        self._parse_worker = None
+        
+        # 清理信号
+        self._task_signals = None
+    
+    def _on_parse_error(self, error_msg: str):
+        """解析任务出错"""
+        from ..widgets.result_dialog import ResultDialog
+        
+        self.btn_parse.setEnabled(True)
+        self.btn_parse.setText("开始解析")
+        self.lbl_parse_status.setText("出错")
+        self._log(f"[Step3] {error_msg}", "error")
+        ResultDialog.show_error(self, "解析出错", error_msg[:500])
+        self._task_signals = None
     
     # ==================== 缓存相关 ====================
     

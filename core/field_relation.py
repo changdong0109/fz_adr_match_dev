@@ -774,7 +774,7 @@ class RelationExporter:
         file_b_name: str
     ) -> bool:
         """
-        导出为带颜色区分的 Excel 文件
+        导出为带颜色区分的 Excel 文件（使用 openpyxl）
         
         Args:
             df: 要导出的 DataFrame
@@ -789,76 +789,158 @@ class RelationExporter:
             是否成功
         """
         try:
-            import xlsxwriter
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.utils.dataframe import dataframe_to_rows
         except ImportError:
-            self._log("xlsxwriter 未安装，使用普通 Excel 导出", "warning")
+            self._log("openpyxl 未安装，使用普通 Excel 导出", "warning")
             df.to_excel(output_path, index=False)
             return True
         
         try:
-            workbook = xlsxwriter.Workbook(output_path)
-            worksheet = workbook.add_worksheet("关联数据")
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "关联数据"
             
-            # 定义格式
-            header_a = workbook.add_format({
-                'bold': True, 'bg_color': '#DBEAFE', 'border': 1,
-                'align': 'center', 'valign': 'vcenter'
-            })
-            header_join = workbook.add_format({
-                'bold': True, 'bg_color': '#FEF3C7', 'border': 1,
-                'align': 'center', 'valign': 'vcenter'
-            })
-            header_b = workbook.add_format({
-                'bold': True, 'bg_color': '#D1FAE5', 'border': 1,
-                'align': 'center', 'valign': 'vcenter'
-            })
-            cell_format = workbook.add_format({'border': 1})
+            # 定义样式
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # 表头样式 - 使用更鲜艳的颜色（ARGB格式，8位）
+            # 蓝色系 - 表A
+            header_a_fill = PatternFill(patternType="solid", fgColor="FF93C5FD")  # 蓝色
+            header_a_font = Font(bold=True, color="FF1E3A8A")
+            
+            # 黄色系 - 关联字段
+            header_join_fill = PatternFill(patternType="solid", fgColor="FFFCD34D")  # 黄色
+            header_join_font = Font(bold=True, color="FF92400E")
+            
+            # 绿色系 - 表B
+            header_b_fill = PatternFill(patternType="solid", fgColor="FF86EFAC")  # 绿色
+            header_b_font = Font(bold=True, color="FF065F46")
+            
+            # 数据行样式 - 浅色背景
+            cell_a_fill = PatternFill(patternType="solid", fgColor="FFDBEAFE")  # 浅蓝
+            cell_join_fill = PatternFill(patternType="solid", fgColor="FFFEF3C7")  # 浅黄
+            cell_b_fill = PatternFill(patternType="solid", fgColor="FFD1FAE5")  # 浅绿
+            
+            # 预计算每列的样式类型
+            col_types = []
+            for col_name in df.columns:
+                if col_name in cols_a:
+                    col_types.append('a')
+                elif col_name in join_cols:
+                    col_types.append('join')
+                elif col_name in cols_b:
+                    col_types.append('b')
+                else:
+                    col_types.append('join')  # 默认
+            
+            self._log(f"[导出] cols_a: {cols_a[:3]}..., cols_b: {cols_b[:3]}..., join_cols: {join_cols}", "debug")
+            self._log(f"[导出] df.columns: {list(df.columns)[:5]}...", "debug")
+            self._log(f"[导出] col_types: {col_types[:5]}...", "debug")
             
             # 写入表头
             for col_idx, col_name in enumerate(df.columns):
-                if col_name in cols_a:
-                    fmt = header_a
-                elif col_name in join_cols:
-                    fmt = header_join
-                elif col_name in cols_b:
-                    fmt = header_b
-                else:
-                    fmt = header_join  # 默认黄色
-                worksheet.write(0, col_idx, col_name, fmt)
+                cell = ws.cell(row=1, column=col_idx + 1, value=col_name)
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+                
+                col_type = col_types[col_idx]
+                if col_type == 'a':
+                    cell.fill = header_a_fill
+                    cell.font = header_a_font
+                elif col_type == 'join':
+                    cell.fill = header_join_fill
+                    cell.font = header_join_font
+                else:  # 'b'
+                    cell.fill = header_b_fill
+                    cell.font = header_b_font
             
             # 写入数据
-            for row_idx, row in enumerate(df.values, start=1):
+            for row_idx, row in enumerate(df.values, start=2):
                 for col_idx, value in enumerate(row):
+                    # 处理 NaN
                     if value is None or (isinstance(value, float) and str(value) == 'nan'):
-                        worksheet.write(row_idx, col_idx, '', cell_format)
-                    else:
-                        worksheet.write(row_idx, col_idx, value, cell_format)
+                        value = ''
+                    
+                    cell = ws.cell(row=row_idx, column=col_idx + 1, value=value)
+                    cell.border = thin_border
+                    
+                    col_type = col_types[col_idx]
+                    if col_type == 'a':
+                        cell.fill = cell_a_fill
+                    elif col_type == 'join':
+                        cell.fill = cell_join_fill
+                    else:  # 'b'
+                        cell.fill = cell_b_fill
             
             # 冻结首行
-            worksheet.freeze_panes(1, 0)
+            ws.freeze_panes = 'A2'
             
             # 自动调整列宽
             for col_idx, col_name in enumerate(df.columns):
-                max_len = max(len(str(col_name)), df.iloc[:, col_idx].astype(str).str.len().max())
-                worksheet.set_column(col_idx, col_idx, min(max_len + 2, 50))
+                max_len = max(
+                    len(str(col_name)),
+                    df.iloc[:, col_idx].astype(str).str.len().max() if len(df) > 0 else 0
+                )
+                ws.column_dimensions[ws.cell(row=1, column=col_idx + 1).column_letter].width = min(max_len + 2, 50)
             
             # 添加图例说明 sheet
-            legend_sheet = workbook.add_worksheet("图例说明")
-            legend_sheet.write(0, 0, "颜色说明", workbook.add_format({'bold': True, 'font_size': 14}))
-            legend_sheet.write(2, 0, "🔵 蓝色", header_a)
-            legend_sheet.write(2, 1, f"表A ({file_a_name}) 的字段")
-            legend_sheet.write(3, 0, "🟡 黄色", header_join)
-            legend_sheet.write(3, 1, "关联字段（用于匹配的字段）")
-            legend_sheet.write(4, 0, "🟢 绿色", header_b)
-            legend_sheet.write(4, 1, f"表B ({file_b_name}) 的字段")
-            legend_sheet.set_column(0, 0, 15)
-            legend_sheet.set_column(1, 1, 40)
+            legend_ws = wb.create_sheet("图例说明")
             
-            workbook.close()
+            # 重新定义图例用的样式（因为原样式可能已被修改）
+            legend_a_fill = PatternFill(patternType="solid", fgColor="FF93C5FD")
+            legend_join_fill = PatternFill(patternType="solid", fgColor="FFFCD34D")
+            legend_b_fill = PatternFill(patternType="solid", fgColor="FF86EFAC")
+            legend_cell_a = PatternFill(patternType="solid", fgColor="FFDBEAFE")
+            legend_cell_join = PatternFill(patternType="solid", fgColor="FFFEF3C7")
+            legend_cell_b = PatternFill(patternType="solid", fgColor="FFD1FAE5")
+            
+            legend_ws['A1'] = "颜色说明"
+            legend_ws['A1'].font = Font(bold=True, size=14)
+            
+            legend_ws['A3'] = "蓝色区域"
+            legend_ws['A3'].fill = legend_a_fill
+            legend_ws['A3'].font = Font(bold=True, color="FF1E3A8A")
+            legend_ws['B3'] = f"表A ({file_a_name}) 的字段"
+            
+            legend_ws['A4'] = "黄色区域"
+            legend_ws['A4'].fill = legend_join_fill
+            legend_ws['A4'].font = Font(bold=True, color="FF92400E")
+            legend_ws['B4'] = "关联字段（用于匹配的字段，位于两表中间）"
+            
+            legend_ws['A5'] = "绿色区域"
+            legend_ws['A5'].fill = legend_b_fill
+            legend_ws['A5'].font = Font(bold=True, color="FF065F46")
+            legend_ws['B5'] = f"表B ({file_b_name}) 的字段"
+            
+            legend_ws['A7'] = "列顺序"
+            legend_ws['A7'].font = Font(bold=True, size=14)
+            legend_ws['A8'] = "表A全部字段"
+            legend_ws['A8'].fill = legend_cell_a
+            legend_ws['B8'] = "→"
+            legend_ws['C8'] = "关联字段"
+            legend_ws['C8'].fill = legend_cell_join
+            legend_ws['D8'] = "→"
+            legend_ws['E8'] = "表B全部字段"
+            legend_ws['E8'].fill = legend_cell_b
+            
+            legend_ws.column_dimensions['A'].width = 15
+            legend_ws.column_dimensions['B'].width = 50
+            
+            wb.save(output_path)
+            self._log(f"[导出] Excel 颜色导出成功: {output_path}", "info")
             return True
             
         except Exception as e:
-            self._log(f"Excel 导出失败: {e}", "error")
+            self._log(f"Excel 颜色导出失败: {e}，降级为普通导出", "error")
+            import traceback
+            self._log(f"[导出] 错误详情: {traceback.format_exc()}", "debug")
             # 降级为普通导出
             df.to_excel(output_path, index=False)
             return True

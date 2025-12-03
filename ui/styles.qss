@@ -2023,3 +2023,169 @@ QPushButton#clear_dialog_btn_confirm:hover {
     background-color: #b91c1c;
 }
 
+/* ========== Step4 预览按钮 ========== */
+QPushButton#step4_btn_preview {
+    background-color: #7c3aed;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+QPushButton#step4_btn_preview:hover {
+    background-color: #6d28d9;
+}
+
+/* ========== Step5 字段配置按钮 ========== */
+QPushButton#step5_btn_config_fields {
+    background-color: #6366f1;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+QPushButton#step5_btn_config_fields:hover {
+    background-color: #4f46e5;
+}
+
+/* ========== 预览对话框 ========== */
+QLabel#preview_stats {
+    font-size: 14px;
+    font-weight: bold;
+    color: #0284c7;
+    padding: 8px 0;
+}
+
+QTableWidget#preview_table {
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+/* ========== 进度条优化 ========== */
+QProgressBar {
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background-color: #f8fafc;
+    text-align: center;
+    min-height: 20px;
+}
+
+QProgressBar::chunk {
+    background-color: #0284c7;
+    border-radius: 3px;
+}
+
+/* ========== Step3 关联数据导出按钮样式 ========== */
+/* 主按钮：导出关联数据 */
+QPushButton#step3_btn_export_join {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    min-width: 200px;
+    min-height: 32px;
+}
+
+QPushButton#step3_btn_export_join:hover {
+    background-color: #2563eb;
+}
+
+QPushButton#step3_btn_export_join:pressed {
+    background-color: #1d4ed8;
+}
+
+/* 次要按钮：导出未关联数据 */
+QPushButton#step3_btn_export_unmatched {
+    background-color: #f97316;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    min-width: 160px;
+    min-height: 32px;
+}
+
+QPushButton#step3_btn_export_unmatched:hover {
+    background-color: #ea580c;
+}
+
+QPushButton#step3_btn_export_unmatched:pressed {
+    background-color: #c2410c;
+}
+
+/* 关闭按钮 */
+QPushButton#step3_btn_close {
+    background-color: #e5e7eb;
+    color: #374151;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    min-width: 80px;
+    min-height: 32px;
+}
+
+QPushButton#step3_btn_close:hover {
+    background-color: #d1d5db;
+}
+
+QPushButton#step3_btn_close:pressed {
+    background-color: #9ca3af;
+}
+
+/* ========== 通用进度对话框样式 ========== */
+QDialog#common_progress_dialog {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+QLabel#progress_dialog_title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1e293b;
+}
+
+QLabel#progress_dialog_message {
+    font-size: 13px;
+    color: #475569;
+    padding: 4px 0;
+}
+
+QProgressBar#progress_dialog_bar {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background-color: #f1f5f9;
+    text-align: center;
+    min-height: 24px;
+    font-size: 12px;
+    color: #475569;
+}
+
+QProgressBar#progress_dialog_bar::chunk {
+    background-color: #3b82f6;
+    border-radius: 5px;
+}
+
+QPushButton#progress_dialog_cancel_btn {
+    background-color: #e5e7eb;
+    color: #374151;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    min-width: 80px;
+    font-size: 13px;
+}
+
+QPushButton#progress_dialog_cancel_btn:hover {
+    background-color: #d1d5db;
+}
+
+QPushButton#progress_dialog_cancel_btn:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+}
+

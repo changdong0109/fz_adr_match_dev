@@ -1,6 +1,11 @@
 """
 Step4: 匹配任务管理Widget
 左右分栏布局：左侧任务组列表 + 右侧任务组配置详情
+
+产品化功能：
+- 任务组配置持久化（保存到cache_folder/match_tasks.json）
+- 支持匹配结果预览
+- 使用 POIMatcher 作为核心匹配引擎
 """
 import os
 from typing import Callable, Dict, Optional, List
@@ -15,6 +20,9 @@ from qgis.PyQt.QtCore import Qt
 from ..widgets.base_step_widget import BaseStepWidget
 from ..widgets.no_wheel_combo_box import NoWheelComboBox
 
+# 导入任务管理器
+from ...core.match_executor import MatchTaskManager
+
 
 class Step4Widget(BaseStepWidget):
     """Step4: 匹配任务管理 - 左右分栏布局"""
@@ -28,11 +36,20 @@ class Step4Widget(BaseStepWidget):
         self.global_config = global_config
         self._task_groups: List[Dict] = []
         self._current_group_idx = -1
-        self._available_files: List[str] = []  # 可用文件列表
+        self._available_files: List[str] = []
+        self._persist_manager: Optional[MatchTaskManager] = None
         super().__init__(parent, log_callback, task_manager)
+        self._init_persist_manager()
         self._build_ui()
         self._load_available_files()
-        self._load_demo_data()
+        self._load_persisted_tasks()
+    
+    def _init_persist_manager(self):
+        """初始化任务持久化管理器"""
+        global_config = self._get_global_config()
+        if global_config:
+            self._persist_manager = MatchTaskManager(global_config)
+            self._log("[Step4] 任务持久化管理器初始化完成", "info")
     
     def _get_global_config(self):
         """获取全局配置组件"""
@@ -269,7 +286,7 @@ class Step4Widget(BaseStepWidget):
         config_layout.addLayout(remark_row)
         
         # ===== 操作按钮区域 =====
-        btn_row = QHBoxLayout()
+            btn_row = QHBoxLayout()
         btn_row.addStretch()
         
         btn_save = QPushButton("保存配置")
@@ -277,12 +294,19 @@ class Step4Widget(BaseStepWidget):
         btn_save.setMinimumHeight(36)
         btn_save.clicked.connect(self._save_current_config)
         btn_row.addWidget(btn_save)
-        
+            
+        btn_preview = QPushButton("预览(10条)")
+        btn_preview.setObjectName("step4_btn_preview")
+        btn_preview.setMinimumHeight(36)
+        btn_preview.setToolTip("匹配前10条记录预览，确认匹配逻辑是否正确")
+        btn_preview.clicked.connect(self._preview_match)
+        btn_row.addWidget(btn_preview)
+            
         btn_run = QPushButton("执行任务")
         btn_run.setObjectName("step4_btn_run")
         btn_run.setMinimumHeight(36)
         btn_run.clicked.connect(self._run_current_group)
-        btn_row.addWidget(btn_run)
+            btn_row.addWidget(btn_run)
         
         btn_delete = QPushButton("删除任务组")
         btn_delete.setObjectName("step4_btn_delete")
@@ -302,11 +326,27 @@ class Step4Widget(BaseStepWidget):
         
         return panel
     
-    def _load_demo_data(self):
-        """初始化任务组数据"""
-        # 初始化为空列表，由用户手动添加
-        self._task_groups = []
+    def _load_persisted_tasks(self):
+        """从持久化存储加载任务组数据"""
+        if self._persist_manager:
+            persisted = self._persist_manager.load_tasks()
+            if persisted:
+                self._task_groups = persisted
+                self._log(f"[Step4] 加载已保存的任务组: {len(self._task_groups)} 个", "info")
+            else:
+                self._task_groups = []
+        else:
+            self._task_groups = []
         self._refresh_task_list()
+    
+    def _persist_tasks(self):
+        """保存任务组到持久化存储"""
+        if self._persist_manager:
+            self._persist_manager.save_tasks(self._task_groups)
+    
+    def _load_demo_data(self):
+        """[兼容] 初始化任务组数据"""
+        self._load_persisted_tasks()
     
     def _refresh_task_list(self):
         """刷新左侧任务组列表"""
@@ -466,6 +506,7 @@ class Step4Widget(BaseStepWidget):
             "progress": 0
         }
         self._task_groups.append(new_group)
+        self._persist_tasks()  # 持久化
         self._refresh_task_list()
         
         # 选中新任务组
@@ -642,18 +683,145 @@ class Step4Widget(BaseStepWidget):
         group["targets"] = targets
         group["status"] = "待执行"
         
+        self._persist_tasks()  # 持久化
         self._refresh_task_list()
         self._log(f"[Step4] 保存任务组配置: {group['name']}", "info")
     
     def _run_current_group(self):
-        """执行当前任务组"""
+        """执行当前任务组 - 调用POI匹配引擎（后台线程）"""
+        from ..workers.match_worker import MatchWorker
+        from ..widgets.result_dialog import ResultDialog
+        
+        # 检查是否已有任务在运行
+        if hasattr(self, '_match_worker') and self._match_worker is not None and self._match_worker.isRunning():
+            ResultDialog.show_warning(self, "任务进行中", "请等待当前匹配任务完成")
+            return
+        
         if self._current_group_idx < 0:
             return
         
         group = self._task_groups[self._current_group_idx]
+        
+        # 验证配置
+        if not group.get("source"):
+            self._log("[Step4] 请先选择源表", "warning")
+            return
+        
+        targets = group.get("targets", [])
+        valid_targets = [t for t in targets if t.get("table")]
+        if not valid_targets:
+            self._log("[Step4] 请先添加目标表", "warning")
+            return
+        
         group["status"] = "执行中"
+        group["progress"] = 0
         self._refresh_task_list()
-        self._log(f"[Step4] 开始执行任务组: {group['name']}", "info")
+        self._log(f"[Step4] 开始后台执行任务组: {group['name']}", "info")
+        
+        # 使用 MatchExecutor 执行匹配
+        from ...core.match_executor import MatchExecutor
+        
+        global_config = self._get_global_config()
+        if not global_config:
+            self._log("[Step4] 无法获取全局配置", "error")
+            group["status"] = "失败"
+            self._refresh_task_list()
+            return
+        
+        try:
+            # 创建执行器（不传入 log_callback，避免后台线程直接操作 UI）
+            executor = MatchExecutor(
+                global_config=global_config,
+                log_callback=None  # 日志通过 Worker 信号发送
+            )
+            
+            # 创建并启动 Worker（只执行当前任务组）
+            self._match_worker = MatchWorker(
+                executor=executor,
+                task_groups=[group],
+                parent=self
+            )
+            
+            # 连接信号
+            self._match_worker.progress.connect(
+                lambda cur, tot, msg: self._update_match_progress(group, cur, tot, msg)
+            )
+            self._match_worker.log.connect(self._log)
+            self._match_worker.group_completed.connect(self._on_group_completed)
+            self._match_worker.finished.connect(self._on_match_finished)
+            self._match_worker.error.connect(self._on_match_error)
+            
+            # 启动
+            self._match_worker.start()
+            
+        except Exception as e:
+            group["status"] = "失败"
+            self._log(f"[Step4] 执行异常: {e}", "error")
+            self._persist_tasks()
+            self._refresh_task_list()
+    
+    def _on_group_completed(self, group_name: str, result: dict):
+        """单个任务组完成"""
+        # 查找对应的任务组
+        for group in self._task_groups:
+            if group.get('name') == group_name:
+                if result.get('success'):
+                    group["status"] = "已完成"
+                    group["progress"] = 100
+                else:
+                    group["status"] = "失败"
+                break
+        self._refresh_task_list()
+    
+    def _on_match_finished(self, summary: dict):
+        """匹配任务完成"""
+        self._match_worker = None
+        self._persist_tasks()
+        self._refresh_task_list()
+        
+        if summary.get('cancelled'):
+            self._log("[Step4] 匹配任务已取消", "warning")
+            return
+        
+        # 显示结果
+        results = summary.get('results', [])
+        if results and results[0].get('success'):
+            self._show_match_result_dialog(results[0])
+    
+    def _on_match_error(self, error_msg: str):
+        """匹配任务出错"""
+        self._match_worker = None
+        
+        # 更新当前任务组状态
+        if self._current_group_idx >= 0:
+            self._task_groups[self._current_group_idx]["status"] = "失败"
+        
+        self._persist_tasks()
+        self._refresh_task_list()
+        self._log(f"[Step4] 匹配出错: {error_msg}", "error")
+    
+    def _update_match_progress(self, group: Dict, current: int, total: int, message: str):
+        """更新匹配进度"""
+        if total > 0:
+            group["progress"] = int(current / total * 100)
+        self._refresh_task_list()
+    
+    def _show_match_result_dialog(self, result: Dict):
+        """显示匹配结果对话框"""
+        from qgis.PyQt.QtWidgets import QMessageBox
+        
+        msg = f"""匹配任务完成！
+
+任务名称: {result.get('task_name', '')}
+执行时间: {result.get('execution_time', '')}
+
+源表总计: {result.get('total_source', 0)} 条
+匹配成功: {result.get('total_matched', 0)} 条
+未匹配: {result.get('total_unmatched', 0)} 条
+
+结果已保存到缓存目录的 match_results 文件夹。"""
+        
+        QMessageBox.information(self, "匹配完成", msg)
     
     def _delete_current_group(self):
         """删除当前任务组"""
@@ -663,6 +831,7 @@ class Step4Widget(BaseStepWidget):
         group = self._task_groups[self._current_group_idx]
         del self._task_groups[self._current_group_idx]
         self._current_group_idx = -1
+        self._persist_tasks()  # 持久化
         self._refresh_task_list()
         
         # 隐藏配置面板
@@ -693,3 +862,158 @@ class Step4Widget(BaseStepWidget):
         """显示时刷新文件列表"""
         super().showEvent(event)
         self._load_available_files()
+    
+    def _preview_match(self):
+        """预览匹配结果（前10条）"""
+        if self._current_group_idx < 0:
+            return
+        
+        group = self._task_groups[self._current_group_idx]
+        
+        # 验证配置
+        if not group.get("source"):
+            self._log("[Step4] 请先选择源表", "warning")
+            return
+        
+        targets = group.get("targets", [])
+        if not targets or not targets[0].get("table"):
+            self._log("[Step4] 请先添加目标表", "warning")
+            return
+        
+        self._log("[Step4] 开始预览匹配（前10条）...", "info")
+        
+        import pandas as pd
+        from ...core.poi_matcher import POIMatcher
+        
+        global_config = self._get_global_config()
+        if not global_config:
+            self._log("[Step4] 无法获取全局配置", "error")
+            return
+        
+        region_info = global_config.get_region_info()
+        
+        # 加载源表
+        source_file = group.get("source")
+        source_df = self._load_file_for_preview(source_file, region_info)
+        if source_df is None or source_df.empty:
+            self._log(f"[Step4] 源表加载失败: {source_file}", "error")
+            return
+        
+        # 只取前10条
+        source_df = source_df.head(10)
+        
+        # 加载第一个目标表
+        target_file = targets[0].get("table")
+        target_df = self._load_file_for_preview(target_file, region_info)
+        if target_df is None or target_df.empty:
+            self._log(f"[Step4] 目标表加载失败: {target_file}", "error")
+            return
+        
+        # 检测POI列
+        poi_col = self._detect_poi_column(source_df)
+        target_poi_col = self._detect_poi_column(target_df)
+        
+        if not poi_col:
+            self._log("[Step4] 源表未找到POI列", "error")
+            return
+        if not target_poi_col:
+            self._log("[Step4] 目标表未找到POI列", "error")
+            return
+        
+        # 执行预览匹配
+        matcher = POIMatcher(log_callback=self._log)
+        preview_df = matcher.match(
+            left_df=source_df,
+            right_df=target_df,
+            left_file=source_file,
+            right_file=target_file,
+            left_poi_col=poi_col,
+            right_poi_col=target_poi_col
+        )
+        
+        # 显示预览结果
+        self._show_preview_dialog(preview_df)
+    
+    def _load_file_for_preview(self, filename: str, region_info: Dict):
+        """加载文件用于预览"""
+        import pandas as pd
+        
+        for folder in [region_info.get('customer_folder', ''), 
+                      region_info.get('shp_folder', '')]:
+            if folder and os.path.isdir(folder):
+                filepath = os.path.join(folder, filename)
+                if os.path.exists(filepath):
+                    try:
+                        if filepath.lower().endswith('.csv'):
+                            for enc in ['utf-8', 'gbk', 'gb2312', 'utf-8-sig']:
+                                try:
+                                    return pd.read_csv(filepath, encoding=enc)
+                                except UnicodeDecodeError:
+                                    continue
+                        elif filepath.lower().endswith(('.xlsx', '.xls')):
+                            return pd.read_excel(filepath)
+                    except Exception as e:
+                        self._log(f"[Step4] 读取失败: {e}", "error")
+        return None
+    
+    def _detect_poi_column(self, df) -> str:
+        """检测POI列"""
+        for col in ["标准化POI抽取", "predict_poi", "POI", "poi"]:
+            if col in df.columns:
+                return col
+        return ""
+    
+    def _show_preview_dialog(self, preview_df):
+        """显示预览结果对话框"""
+        from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, QHeaderView, QLabel
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("匹配预览（前10条）")
+        dialog.resize(1000, 500)
+        dialog.setMinimumSize(800, 400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        lbl_hint = QLabel("以下是前10条记录的匹配预览结果：")
+        layout.addWidget(lbl_hint)
+        
+        # 统计
+        matched_count = len(preview_df[preview_df["是否匹配"] == "是"]) if not preview_df.empty else 0
+        total = len(preview_df) if not preview_df.empty else 0
+        lbl_stats = QLabel(f"预览结果: {matched_count}/{total} 条匹配成功")
+        lbl_stats.setObjectName("preview_stats")
+        layout.addWidget(lbl_stats)
+        
+        # 表格
+        table = QTableWidget()
+        table.setObjectName("preview_table")
+        
+        display_cols = ["源表行号", "源表POI", "目标表行号", "目标表POI", "匹配类型", "匹配分数", "是否匹配"]
+        actual_cols = [c for c in display_cols if c in preview_df.columns]
+        
+        table.setColumnCount(len(actual_cols))
+        table.setHorizontalHeaderLabels(actual_cols)
+        table.setRowCount(len(preview_df))
+        
+        for row_idx, (_, row) in enumerate(preview_df.iterrows()):
+            for col_idx, col in enumerate(actual_cols):
+                value = str(row.get(col, ""))
+                item = QTableWidgetItem(value)
+                
+                if row.get("是否匹配") == "是":
+                    item.setBackground(QColor("#dcfce7"))
+                else:
+                    item.setBackground(QColor("#fee2e2"))
+                
+                table.setItem(row_idx, col_idx, item)
+        
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        layout.addWidget(table, 1)
+        
+        btn_close = QPushButton("关闭")
+        btn_close.clicked.connect(dialog.accept)
+        layout.addWidget(btn_close)
+        
+        dialog.exec()

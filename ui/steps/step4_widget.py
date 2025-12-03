@@ -74,9 +74,7 @@ class Step4Widget(BaseStepWidget):
         """
         从全局配置加载可用文件列表
         
-        优先级：
-        1. 标准化后的文件（*_标准化.csv）- 包含 POI 列，可直接匹配
-        2. 清洗后的文件（*_清洗.csv）- 需要先在 Step3 解析
+        只加载 Step3 标准化后的文件（*_标准化.csv），包含 POI 列
         """
         self._available_files = []
         self._file_paths = {}  # 文件名 -> 完整路径的映射
@@ -94,52 +92,26 @@ class Step4Widget(BaseStepWidget):
         
         region_prefix = f"{province}{city}{county}" if county else f"{province}{city}"
         
-        # 1. 优先扫描标准化结果文件夹（Step3解析后的文件）
+        # 只扫描标准化结果文件（Step3 解析后的文件）
         clean_folders = [
             os.path.join(base_folder, f"{region_prefix}_客户数据清洗", "清洗后数据"),
             os.path.join(base_folder, f"{region_prefix}_GIS数据清洗", "清洗后数据"),
         ]
         
-        standardized_files = []
         for folder in clean_folders:
             if os.path.isdir(folder):
                 for f in os.listdir(folder):
+                    # 只加载标准化文件
                     if f.lower().endswith('.csv') and '_标准化' in f:
                         full_path = os.path.join(folder, f)
                         if f not in self._file_paths:  # 避免重复
-                            standardized_files.append(f)
+                            self._available_files.append(f)
                             self._file_paths[f] = full_path
         
-        # 2. 如果没有标准化文件，扫描清洗后的文件
-        cleaned_files = []
-        for folder in clean_folders:
-            if os.path.isdir(folder):
-                for f in os.listdir(folder):
-                    if f.lower().endswith('.csv') and '_清洗' in f and f not in self._file_paths:
-                        full_path = os.path.join(folder, f)
-                        cleaned_files.append(f)
-                        self._file_paths[f] = full_path
-        
-        # 3. 原始数据文件夹（备用）
-        customer_folder = region_info.get('customer_folder', '')
-        shp_folder = region_info.get('shp_folder', '')
-        
-        original_files = []
-        for folder in [customer_folder, shp_folder]:
-            if folder and os.path.isdir(folder):
-                for f in os.listdir(folder):
-                    if f.lower().endswith(('.csv', '.xlsx', '.xls')) and f not in self._file_paths:
-                        full_path = os.path.join(folder, f)
-                        original_files.append(f)
-                        self._file_paths[f] = full_path
-        
-        # 合并文件列表：标准化 > 清洗 > 原始
-        self._available_files = standardized_files + cleaned_files + original_files
-        
-        if standardized_files:
-            self._log(f"[Step4] 加载文件: {len(standardized_files)} 个标准化文件, {len(cleaned_files)} 个清洗文件, {len(original_files)} 个原始文件", "info")
+        if self._available_files:
+            self._log(f"[Step4] 加载 Step3 标准化结果: {len(self._available_files)} 个文件", "info")
         else:
-            self._log(f"[Step4] 加载文件: {len(self._available_files)} 个（⚠️ 未找到标准化文件，请先在 Step3 执行解析）", "warning")
+            self._log("[Step4] ⚠️ 未找到标准化文件，请先在 Step3 执行解析", "warning")
         
         # 更新下拉框
         self._update_file_combos()
@@ -1006,10 +978,10 @@ class Step4Widget(BaseStepWidget):
         self._show_preview_dialog(preview_df)
     
     def _load_file_for_preview(self, filename: str, region_info: Dict):
-        """加载文件用于预览"""
+        """加载文件用于预览（只从标准化文件夹加载）"""
         import pandas as pd
         
-        # 1. 优先从缓存的路径映射中获取
+        # 从缓存的路径映射中获取
         if hasattr(self, '_file_paths') and filename in self._file_paths:
             filepath = self._file_paths[filename]
             if os.path.exists(filepath):
@@ -1017,31 +989,9 @@ class Step4Widget(BaseStepWidget):
                     return self._read_file(filepath)
                 except Exception as e:
                     self._log(f"[Step4] 读取失败: {e}", "error")
+                    return None
         
-        # 2. 搜索标准化/清洗文件夹
-        base_folder = region_info.get('base_folder', '')
-        province = region_info.get('province', '')
-        city = region_info.get('city', '')
-        county = region_info.get('county', '')
-        region_prefix = f"{province}{city}{county}" if county else f"{province}{city}"
-        
-        search_folders = [
-            os.path.join(base_folder, f"{region_prefix}_客户数据清洗", "清洗后数据"),
-            os.path.join(base_folder, f"{region_prefix}_GIS数据清洗", "清洗后数据"),
-            region_info.get('customer_folder', ''),
-            region_info.get('shp_folder', ''),
-        ]
-        
-        for folder in search_folders:
-            if folder and os.path.isdir(folder):
-                filepath = os.path.join(folder, filename)
-                if os.path.exists(filepath):
-                    try:
-                        return self._read_file(filepath)
-                    except Exception as e:
-                        self._log(f"[Step4] 读取失败: {e}", "error")
-        
-        self._log(f"[Step4] 文件未找到: {filename}", "error")
+        self._log(f"[Step4] 文件未找到: {filename}（请刷新文件列表）", "error")
         return None
     
     def _read_file(self, filepath: str):

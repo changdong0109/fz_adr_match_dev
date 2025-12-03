@@ -1071,7 +1071,7 @@ class Step2Widget(BaseStepWidget):
             # 格式：文件名 [已配置 3字段] 或 文件名 [未配置]
             if configured == "已配置":
                 display_text = f"{file_name}  [已配置 {field_count}字段]"
-        else:
+            else:
                 display_text = f"{file_name}  [未配置]"
             
             self.file_select_combo.addItem(display_text, file_name)

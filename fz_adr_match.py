@@ -78,6 +78,17 @@ class FzAdrMatchPlugin:
     def run(self):
         """运行插件主功能"""
         try:
+            # 如果对话框已存在且未被销毁，直接显示并激活
+            if self.match_dialog is not None:
+                try:
+                    self.match_dialog.show()
+                    self.match_dialog.raise_()
+                    self.match_dialog.activateWindow()
+                    return
+                except RuntimeError:
+                    # 对话框已被销毁，重新创建
+                    self.match_dialog = None
+            
             # 加载匹配对话框
             MatchDialogClass = load_match_dialog()
             

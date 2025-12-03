@@ -7,9 +7,8 @@ from qgis.PyQt.QtWidgets import (
     QDialog, QHBoxLayout, QVBoxLayout, QWidget, QLabel, QListWidget,
     QListWidgetItem, QTextEdit, QScrollArea, QGroupBox
 )
-from qgis.PyQt.QtCore import QEvent
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtGui import QFont
+from qgis.PyQt.QtCore import QEvent, Qt
+from qgis.PyQt.QtGui import QFont, QCloseEvent
 
 from .steps import Step1Widget, Step2Widget, Step3Widget, Step4Widget, Step5Widget
 from .modals import FilterModal, MatchModal
@@ -415,3 +414,11 @@ class MatchDialog(QDialog):
             except Exception as e:
                 self._log(f"[错误] 打开字段关联对话框失败：{e}", "error")
         return ""
+    
+    def closeEvent(self, event: QCloseEvent):
+        """
+        重写关闭事件：点击关闭按钮时隐藏窗口而不是关闭
+        再次点击插件按钮可以恢复窗口
+        """
+        event.ignore()  # 忽略关闭事件
+        self.hide()     # 隐藏窗口

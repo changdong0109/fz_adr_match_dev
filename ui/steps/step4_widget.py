@@ -286,7 +286,7 @@ class Step4Widget(BaseStepWidget):
         config_layout.addLayout(remark_row)
         
         # ===== 操作按钮区域 =====
-            btn_row = QHBoxLayout()
+        btn_row = QHBoxLayout()
         btn_row.addStretch()
         
         btn_save = QPushButton("保存配置")
@@ -294,19 +294,19 @@ class Step4Widget(BaseStepWidget):
         btn_save.setMinimumHeight(36)
         btn_save.clicked.connect(self._save_current_config)
         btn_row.addWidget(btn_save)
-            
+        
         btn_preview = QPushButton("预览(10条)")
         btn_preview.setObjectName("step4_btn_preview")
         btn_preview.setMinimumHeight(36)
         btn_preview.setToolTip("匹配前10条记录预览，确认匹配逻辑是否正确")
         btn_preview.clicked.connect(self._preview_match)
         btn_row.addWidget(btn_preview)
-            
+        
         btn_run = QPushButton("执行任务")
         btn_run.setObjectName("step4_btn_run")
         btn_run.setMinimumHeight(36)
         btn_run.clicked.connect(self._run_current_group)
-            btn_row.addWidget(btn_run)
+        btn_row.addWidget(btn_run)
         
         btn_delete = QPushButton("删除任务组")
         btn_delete.setObjectName("step4_btn_delete")

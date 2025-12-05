@@ -2405,7 +2405,9 @@ class Step5Widget(BaseStepWidget):
         duplicate_count = duplicate_stats.get('duplicate_records', duplicate_stats.get('duplicate_values', 0))
         
         # 验证通过（匹配结果在数据库中存在且位置偏差在阈值内）
-        valid_count = match_found - exceed_threshold
+        # 注意：验证通过应该是位置偏差在阈值内的数量，而不是match_found - exceed_threshold
+        # 因为不是所有match_found都能进行位置偏差检查（有些可能无法获取坐标）
+        valid_count = within_threshold
         self._update_stat_card(self.stat_valid, "验证通过", str(valid_count))
         
         # 缺失数据（匹配结果在数据库中缺失）

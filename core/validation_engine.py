@@ -528,16 +528,18 @@ class ValidationEngine:
                 exceed_threshold += 1
         
         total_checked = within_threshold + exceed_threshold
+        total_attempted = len(match_df)  # 匹配结果总数（尝试检查的所有记录）
         
         # 添加调试日志
-        self._log(f"[验证引擎] 位置偏差验证统计: 检查总数={total_checked}, 阈值内={within_threshold}, 超过阈值={exceed_threshold}, 无SHP坐标={no_shp_coord}, 无数据库坐标={no_db_coord}", "info")
+        self._log(f"[验证引擎] 位置偏差验证统计: 匹配结果总数={total_attempted}, 成功检查数={total_checked}, 阈值内={within_threshold}, 超过阈值={exceed_threshold}, 无SHP坐标={no_shp_coord}, 无数据库坐标={no_db_coord}", "info")
         
         return {
-            "total_checked": total_checked,
+            "total_attempted": total_attempted,  # 匹配结果总数（尝试检查的所有记录）
+            "total_checked": total_checked,  # 成功检查数（同时有SHP坐标和数据库坐标的记录）
             "within_threshold": within_threshold,
             "exceed_threshold": exceed_threshold,
-            "no_shp_coord": no_shp_coord,
-            "no_db_coord": no_db_coord,
+            "no_shp_coord": no_shp_coord,  # 无法从原始SHP图层中获取坐标的记录数
+            "no_db_coord": no_db_coord,  # 无法从数据库图层中获取坐标的记录数
             "within_rate": (within_threshold / total_checked * 100) if total_checked > 0 else 0
         }
     

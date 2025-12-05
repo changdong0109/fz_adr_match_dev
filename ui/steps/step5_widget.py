@@ -2407,6 +2407,13 @@ class Step5Widget(BaseStepWidget):
     def _update_stats_detail(self, result: Dict):
         """更新统计详情"""
         stats = result.get('statistics', {})
+        problem_data = result.get('problem_data', {})
+        
+        # 获取实际问题数据数量
+        actual_missing_count = len(problem_data.get('missing', []))
+        actual_deviation_count = len(problem_data.get('deviation', []))
+        actual_duplicate_count = len(problem_data.get('duplicate', []))
+        
         detail_text = "验证统计详情：\n\n"
         
         # 原始客户数据统计
@@ -2424,20 +2431,22 @@ class Step5Widget(BaseStepWidget):
         detail_text += f"  在数据库中存在: {match_completeness.get('found', 0)} ({match_completeness.get('completeness_rate', 0):.2f}%)\n"
         detail_text += f"  在数据库中缺失: {match_completeness.get('missing', 0)}\n"
         
-        # 位置偏差统计
+        # 位置偏差统计（使用实际问题数据数量）
         deviation = stats.get('deviation', {})
         detail_text += f"\n位置偏差统计:\n"
         detail_text += f"  检查总数: {deviation.get('total_checked', 0)}\n"
         detail_text += f"  在阈值内: {deviation.get('within_threshold', 0)} ({deviation.get('within_rate', 0):.2f}%)\n"
-        detail_text += f"  超过阈值: {deviation.get('exceed_threshold', 0)}\n"
+        detail_text += f"  超过阈值: {actual_deviation_count} (实际问题数据数)\n"
         if deviation.get('no_shp_coord', 0) > 0:
             detail_text += f"  无原始坐标: {deviation.get('no_shp_coord', 0)}\n"
         if deviation.get('no_db_coord', 0) > 0:
             detail_text += f"  无数据库坐标: {deviation.get('no_db_coord', 0)}\n"
         
-        # 重复数据统计
+        # 重复数据统计（使用实际问题数据数量）
         duplicate = stats.get('duplicates', {})
         detail_text += f"\n重复数据统计:\n"
+        if actual_duplicate_count > 0:
+            detail_text += f"  实际问题数据数: {actual_duplicate_count}\n"
         detail_text += f"  重复匹配值数: {duplicate.get('duplicate_values', 0)}\n"
         detail_text += f"  重复记录数: {duplicate.get('duplicate_records', 0)}\n"
         
@@ -2630,9 +2639,17 @@ class Step5Widget(BaseStepWidget):
         self._log(f"[Step5] ========== 问题数据表格更新完成 ==========", "info")
         self._log(f"[Step5] 总耗时={total_time:.2f}秒 (缺失={missing_time:.2f}秒, 偏差={deviation_time:.2f}秒, 重复={duplicate_time:.2f}秒)", "info")
         
-        # 根据实际收集到的问题数据数量更新统计卡片（确保统计准确）
+        # 根据实际收集到的问题数据数量更新统计卡片和统计详情（确保统计准确）
         duplicate_count_actual = duplicate_count  # 使用实际收集到的重复数据数量
         self._update_stat_card(self.stat_duplicate, "重复数据", str(duplicate_count_actual))
+        
+        # 在表格更新完成后，使用实际问题数据数量重新更新统计详情
+        if self._validation_result:
+            self._update_stats_detail(self._validation_result)
+        
+        # 根据实际问题数据数量更新统计详情（确保统计准确）
+        if self._validation_result:
+            self._update_stats_detail(self._validation_result)
     
     def _display_problems(self, problems: List[Dict]):
         """显示问题数据到表格（优化版本：禁用更新，批量设置）"""

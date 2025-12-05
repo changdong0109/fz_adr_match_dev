@@ -2468,19 +2468,14 @@ class Step5Widget(BaseStepWidget):
         
         # 显示成功检查数（同时有原始坐标和数据库坐标）
         detail_text += f"  成功检查数: {total_checked} (同时有原始坐标和数据库坐标的记录数)\n"
-        detail_text += f"    在阈值内: {within_threshold} ({deviation.get('within_rate', 0):.2f}%)\n"
-        detail_text += f"    超过阈值: {actual_deviation_count} (实际问题数据数)\n"
+        detail_text += f"    ✓ 在阈值内: {within_threshold} ({deviation.get('within_rate', 0):.2f}%)\n"
+        detail_text += f"    ✗ 超过阈值: {actual_deviation_count} (实际问题数据数)\n"
         
         # 显示无法检查的记录数（用更清晰的说明）
         if no_shp_coord > 0:
-            detail_text += f"  无原始坐标: {no_shp_coord} (说明：匹配结果中的GID在原始SHP文件中找不到，无法获取坐标进行位置检查)\n"
+            detail_text += f"  ⚠ 无原始坐标: {no_shp_coord} (说明：匹配结果中的GID在原始SHP文件中找不到，无法获取坐标)\n"
         if no_db_coord > 0:
-            detail_text += f"  无数据库坐标: {no_db_coord} (说明：匹配结果在数据库点图层中找不到对应坐标，无法获取坐标进行位置检查)\n"
-        
-        # 验证统计口径一致性
-        calculated_total = total_checked + no_shp_coord + no_db_coord
-        if match_total > 0:
-            detail_text += f"  统计验证: 成功检查{total_checked} + 无原始坐标{no_shp_coord} + 无数据库坐标{no_db_coord} = {calculated_total} (匹配结果总数={match_total})\n"
+            detail_text += f"  ⚠ 无数据库坐标: {no_db_coord} (说明：匹配结果在数据库点图层中找不到对应坐标，无法获取坐标)\n"
         
         # 重复数据统计（使用实际问题数据数量）
         duplicate = stats.get('duplicates', {})

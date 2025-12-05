@@ -450,6 +450,129 @@ class MatchExecutor:
         self._log(f"[执行器] 保存 {len(saved_files)} 个分层结果文件到 match_results/", "info")
         for f in saved_files:
             self._log(f"  - {f}", "debug")
+        
+        # 记录文件流转链：更新match_tasks.json，记录匹配结果文件名和原始文件名
+        self._update_match_results_file_chain(source_file, saved_files, cache_folder)
+    
+    def _update_match_results_file_chain(self, source_file: str, result_files: List[str], cache_folder: str):
+        """
+        更新匹配结果的文件流转链到match_tasks.json
+        
+        Args:
+            source_file: 源表文件名（如：廊坊工商户_清洗_标准化.csv）
+            result_files: 匹配结果文件名列表（如：['廊坊工商户_精确匹配_100条.csv']）
+            cache_folder: 缓存目录
+        """
+        try:
+            import json
+            import os
+            
+            # 1. 从file_status.json查找原始文件名
+            file_status_path = os.path.join(cache_folder, "file_status.json")
+            original_source_file = None
+            if os.path.exists(file_status_path):
+                with open(file_status_path, 'r', encoding='utf-8') as f:
+                    file_status = json.load(f)
+                    
+                    # 查找源表文件的原始文件名
+                    for file_name, status in file_status.items():
+                        if isinstance(status, dict):
+                            file_chain = status.get('file_chain', {})
+                            # 检查file_chain中是否有匹配的源表文件
+                            if file_chain.get('step3_parsed') == source_file or file_chain.get('step2_cleaned') == source_file:
+                                original_source_file = file_name
+                                break
+                            # 如果源表文件名直接匹配
+                            if file_name == source_file:
+                                original_source_file = file_name
+                                break
+                    
+                    # 如果还没找到，尝试从文件名推断（去掉_标准化后缀）
+                    if not original_source_file:
+                        source_base = os.path.splitext(source_file)[0]
+                        # 去掉_标准化后缀
+                        if source_base.endswith('_标准化'):
+                            source_base = source_base[:-len('_标准化')]
+                        # 去掉_清洗后缀
+                        if source_base.endswith('_清洗'):
+                            source_base = source_base[:-len('_清洗')]
+                        
+                        # 在file_status.json中查找匹配的文件名
+                        for file_name, status in file_status.items():
+                            if isinstance(status, dict):
+                                file_base = os.path.splitext(file_name)[0]
+                                if file_base == source_base:
+                                    source_type = status.get('source_type', '')
+                                    # 如果是客户采集数据，就是我们要找的原始文件
+                                    if source_type == "客户采集数据":
+                                        original_source_file = file_name
+                                        break
+            
+            # 2. 读取match_tasks.json
+            match_tasks_path = os.path.join(cache_folder, "match_tasks.json")
+            match_tasks_data = {"tasks": []}
+            if os.path.exists(match_tasks_path):
+                try:
+                    with open(match_tasks_path, 'r', encoding='utf-8') as f:
+                        match_tasks_data = json.load(f)
+                except:
+                    pass
+            
+            # 3. 查找并更新对应的任务
+            tasks = match_tasks_data.get('tasks', [])
+            updated = False
+            for task in tasks:
+                if task.get('source') == source_file:
+                    # 更新任务的匹配结果文件列表和原始文件名
+                    if 'results' not in task:
+                        task['results'] = {}
+                    
+                    # 按层级分类结果文件
+                    for result_file in result_files:
+                        if '_精确匹配_' in result_file:
+                            task['results']['exact'] = result_file
+                        elif '_高置信度_' in result_file:
+                            task['results']['high_confidence'] = result_file
+                        elif '_需人工确认_' in result_file:
+                            task['results']['need_review'] = result_file
+                        elif '_未匹配_' in result_file:
+                            task['results']['unmatched'] = result_file
+                    
+                    # 记录原始文件名
+                    if original_source_file:
+                        task['source_original'] = original_source_file
+                    
+                    updated = True
+                    break
+            
+            # 4. 如果没找到任务，创建一个新记录（可能任务配置已删除）
+            if not updated and original_source_file:
+                new_task = {
+                    "source": source_file,
+                    "source_original": original_source_file,
+                    "results": {}
+                }
+                for result_file in result_files:
+                    if '_精确匹配_' in result_file:
+                        new_task['results']['exact'] = result_file
+                    elif '_高置信度_' in result_file:
+                        new_task['results']['high_confidence'] = result_file
+                    elif '_需人工确认_' in result_file:
+                        new_task['results']['need_review'] = result_file
+                    elif '_未匹配_' in result_file:
+                        new_task['results']['unmatched'] = result_file
+                tasks.append(new_task)
+                updated = True
+            
+            # 5. 保存更新后的match_tasks.json
+            if updated:
+                match_tasks_data['tasks'] = tasks
+                with open(match_tasks_path, 'w', encoding='utf-8') as f:
+                    json.dump(match_tasks_data, f, ensure_ascii=False, indent=2)
+                self._log(f"[执行器] 已更新match_tasks.json，记录匹配结果文件流转链", "info")
+        
+        except Exception as e:
+            self._log(f"[执行器] 更新匹配结果文件流转链失败：{e}", "warning")
     
     def _error_result(self, task_name: str, message: str) -> Dict:
         """错误结果"""

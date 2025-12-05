@@ -10,8 +10,7 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import QEvent, Qt
 from qgis.PyQt.QtGui import QFont, QCloseEvent
 
-from .steps import Step1Widget, Step2Widget, Step3Widget, Step4Widget
-# from .steps import Step5Widget  # 已隐藏
+from .steps import Step1Widget, Step2Widget, Step3Widget, Step4Widget, Step5Widget
 from .modals import FilterModal, MatchModal
 from .widgets import TaskManager, GlobalConfigWidget
 from .styles import StyleManager
@@ -99,7 +98,7 @@ class MatchDialog(QDialog):
             "Step2 字段映射与清洗",
             "Step3 标准化解析 & 关联",
             "Step4 匹配任务管理",
-            # "Step5 导出 & 日志",  # 已隐藏
+            "Step5 工具面板",
         ]
         for text in steps:
             item = QListWidgetItem(text)
@@ -206,12 +205,12 @@ class MatchDialog(QDialog):
             global_config=self.global_config
         )
         
-        # Step5 - 已隐藏，但保留widget创建（以防后续需要）
-        # self.step_widgets[5] = Step5Widget(
-        #     self, self._log, self.task_manager, 
-        #     log_panel=None,
-        #     global_config=self.global_config
-        # )
+        # Step5 - 工具面板
+        self.step_widgets[5] = Step5Widget(
+            self, self._log, self.task_manager, 
+            log_panel=None,
+            global_config=self.global_config
+        )
         
         for i, widget in self.step_widgets.items():
             self.content_layout.addWidget(widget)
@@ -318,7 +317,7 @@ class MatchDialog(QDialog):
             2: ("Step2 字段映射与清洗", "为每个文件配置多个字段组合，一次性批量清洗。"),
             3: ("Step3 标准化解析 & 关联", "调用阿里云解析，并展示智能字段关联关系。"),
             4: ("Step4 匹配任务管理", "多源表任务组：一个源表 → 多目标表，带目标优先级。"),
-            # 5: ("Step5 导出 & 日志", "按类型导出所有结果，并集中查看日志。"),  # 已隐藏
+            5: ("Step5 工具面板", "加载SHP文件，验证数据库治理结果，统计和查看问题数据。"),
         }
         if step_num in step_meta:
             title, subtitle = step_meta[step_num]
@@ -411,7 +410,13 @@ class MatchDialog(QDialog):
                 self.match_modal.set_source_and_target(source_name, target_name)
                 
                 if self.match_modal.exec() == QDialog.DialogCode.Accepted:
-                    return self.match_modal.get_summary()
+                    # 返回完整的字段对配置（JSON字符串）和摘要
+                    import json
+                    pairs = self.match_modal.get_pairs()
+                    summary = self.match_modal.get_summary()
+                    # 返回JSON字符串，格式：{"pairs": [...], "summary": "..."}
+                    config_json = json.dumps({"pairs": pairs, "summary": summary}, ensure_ascii=False)
+                    return config_json
             except Exception as e:
                 self._log(f"[错误] 打开字段关联对话框失败：{e}", "error")
         return ""

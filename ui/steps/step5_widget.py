@@ -66,9 +66,10 @@ class ValidationThread(QThread):
                 shp_index=shp_index,  # 纯数据索引（已转换为数据库坐标系）
                 original_shp_gid_field=self.config.get('original_shp_gid_field'),
                 database_match_field=self.config.get('database_match_field', 'name'),  # 固定为'name'
-                source_match_fields=self.config.get('source_match_fields', []),  # 多个字段的列表
+                source_match_fields=self.config.get('source_match_fields', []),  # 匹配结果文件中的字段名
                 deviation_threshold=float(self.config.get('deviation_threshold', 10.0)),
-                db_crs=self.config.get('db_crs')  # 数据库坐标系
+                db_crs=self.config.get('db_crs'),  # 数据库坐标系
+                original_match_fields=self.config.get('original_match_fields')  # Step2配置的原始字段名（用于原始客户数据验证）
             )
             
             if result.get('success'):
@@ -1603,12 +1604,16 @@ class Step5Widget(BaseStepWidget):
                         break
             
             # 保存所有匹配到的字段（用于验证）
+            # matched_field_names: 匹配结果文件中的字段名（如 [源:廊坊工商户]location）- 用于匹配结果验证
+            # field_names: Step2配置的原始字段名（如 location）- 用于原始客户数据验证
             self._matched_field_names = matched_field_names
+            self._original_field_names = field_names  # 保存原始字段名，用于原始客户数据验证
             
             # 记录所有匹配到的字段（用于验证时会使用所有字段）
             if len(matched_field_names) > 0:
                 self._log(f"[Step5] ✅ Step2配置中有 {len(field_names)} 个字段，匹配到 {len(matched_field_names)} 个字段，将使用所有匹配的字段进行验证", "info")
                 self._log(f"[Step5] 所有匹配的字段: {matched_field_names}", "info")
+                self._log(f"[Step5] 原始字段名（用于原始客户数据验证）: {field_names}", "info")
         
         except Exception as e:
             self._log(f"[Step5] 加载Step2字段组合配置失败: {e}", "error")
@@ -2176,6 +2181,21 @@ class Step5Widget(BaseStepWidget):
         
         self._log("[Step5] 索引转换完成，准备启动验证线程...", "info")
         
+        # 获取原始字段名（Step2配置的字段名，用于原始客户数据验证）
+        original_field_names = getattr(self, '_original_field_names', [])
+        if not original_field_names:
+            # 如果没有保存原始字段名，尝试从匹配结果字段名中提取（去掉前缀）
+            import re
+            original_field_names = []
+            for field in source_match_fields:
+                # 尝试提取原始字段名（去掉 [源:表名] 或 【匹配源:表名】 前缀）
+                match = re.match(r'^(?:\[源:[^\]]+\]|【匹配源:[^】]+】)(.+)$', field)
+                if match:
+                    original_field_names.append(match.group(1))
+                else:
+                    # 如果提取失败，使用字段名本身（可能是原始字段名）
+                    original_field_names.append(field)
+        
         # 构建验证配置（传递索引数据，而不是图层对象）
         validation_config = {
             'match_result_file': match_result_path,
@@ -2184,7 +2204,8 @@ class Step5Widget(BaseStepWidget):
             'shp_index': shp_index,  # SHP索引已经是纯数据（已转换为数据库坐标系）
             'original_shp_gid_field': shp_gid_field,
             'database_match_field': 'name',  # 固定使用name字段
-            'source_match_fields': source_match_fields,  # 多个字段的列表
+            'source_match_fields': source_match_fields,  # 匹配结果文件中的字段名（用于匹配结果验证）
+            'original_match_fields': original_field_names,  # Step2配置的原始字段名（用于原始客户数据验证）
             'deviation_threshold': threshold,
             'db_crs': db_crs  # 数据库坐标系（用于距离计算）
         }

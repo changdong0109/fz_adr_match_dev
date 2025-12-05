@@ -260,7 +260,7 @@ class Step3Widget(BaseStepWidget):
         test_row = QHBoxLayout()
         test_row.addWidget(QLabel("测试数量:"))
         self.edit_test_limit = QLineEdit()
-        self.edit_test_limit.setText("5")  # 默认测试 5 条
+        # 默认不填，留空表示全部
         self.edit_test_limit.setPlaceholderText("留空表示全部，填数字限制条数")
         self.edit_test_limit.setMaximumWidth(200)
         test_row.addWidget(self.edit_test_limit)
@@ -2363,6 +2363,19 @@ class Step3Widget(BaseStepWidget):
                 "total_rows": result.get('rows', 0),
                 "cached_rows": result.get('cached', 0)
             })
+            
+            # 更新文件流转链：记录 step3_parsed
+            output_path = result.get('output_path', '')
+            if output_path:
+                # 从输出路径提取标准化文件名（如：廊坊工商户_清洗_标准化.csv）
+                standardized_file_name = os.path.basename(output_path)
+                # 从输入文件名（如：廊坊工商户_清洗.csv）找到原始文件名（如：廊坊工商户.csv）
+                original_file_name = self._get_original_file_from_file_chain(file_name)
+                if original_file_name:
+                    self._update_file_chain(original_file_name, "step3_parsed", standardized_file_name)
+                    self._log(f"[Step3] 已更新文件流转链: {original_file_name} -> {standardized_file_name}", "info")
+                else:
+                    self._log(f"[Step3] ⚠️ 无法找到文件 '{file_name}' 的原始文件名，跳过更新文件流转链", "warning")
     
     def _on_parse_finished(self, result: dict):
         """解析任务完成"""
@@ -2471,6 +2484,98 @@ class Step3Widget(BaseStepWidget):
                 return parent.global_config
             parent = parent.parent()
         return None
+    
+    def _get_project_cleaned_status_file(self) -> str:
+        """获取项目级清洗状态缓存文件路径"""
+        global_config = self._get_global_config()
+        if not global_config:
+            return ""
+        region_info = global_config.get_region_info()
+        cache_folder = region_info.get('cache_folder', '')
+        if not cache_folder:
+            return ""
+        return os.path.join(cache_folder, "file_status.json")
+    
+    def _get_original_file_from_file_chain(self, processed_file_name: str) -> Optional[str]:
+        """
+        从处理后的文件名（如：廊坊工商户_清洗.csv）反向查找到原始文件名（如：廊坊工商户.csv）
+        
+        Args:
+            processed_file_name: 处理后的文件名（如：廊坊工商户_清洗.csv）
+            
+        Returns:
+            原始文件名（如：廊坊工商户.csv），如果找不到则返回 None
+        """
+        cache_file = self._get_project_cleaned_status_file()
+        if not cache_file or not os.path.exists(cache_file):
+            return None
+        
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                file_status = json.load(f)
+            
+            # 遍历所有文件，查找 file_chain 中匹配的文件
+            for file_name, status in file_status.items():
+                if isinstance(status, dict):
+                    file_chain = status.get('file_chain', {})
+                    # 检查 step2_cleaned 是否匹配
+                    if file_chain.get('step2_cleaned') == processed_file_name:
+                        return file_name
+                    # 如果直接匹配文件名（可能是旧数据）
+                    if file_name == processed_file_name:
+                        return file_name
+            
+            return None
+        except Exception as e:
+            self._log(f"[Step3] 查找原始文件名失败: {e}", "error")
+            return None
+    
+    def _update_file_chain(self, original_file: str, step_key: str, processed_file: str):
+        """
+        更新文件流转链
+        
+        Args:
+            original_file: 原始文件名（如：廊坊工商户.csv）
+            step_key: 步骤键（如：step3_parsed）
+            processed_file: 处理后的文件名（如：廊坊工商户_清洗_标准化.csv）
+        """
+        cache_file = self._get_project_cleaned_status_file()
+        if not cache_file:
+            return
+        
+        # 读取现有缓存
+        file_status = {}
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    file_status = json.load(f)
+            except:
+                pass
+        
+        # 初始化文件状态
+        if original_file not in file_status:
+            file_status[original_file] = {}
+        if isinstance(file_status[original_file], str):
+            file_status[original_file] = {"cleaned": file_status[original_file]}
+        
+        # 初始化file_chain（如果不存在）
+        if "file_chain" not in file_status[original_file]:
+            file_status[original_file]["file_chain"] = {}
+            # 确保step1_original也被记录，如果它还没有
+            if "source_path" in file_status[original_file] and "step1_original" not in file_status[original_file]["file_chain"]:
+                file_status[original_file]["file_chain"]["step1_original"] = file_status[original_file]["source_path"]
+            if "step1" not in file_status[original_file]["file_chain"]:
+                file_status[original_file]["file_chain"]["step1"] = original_file  # 记录Step1的CSV文件名
+        
+        # 更新file_chain
+        file_status[original_file]["file_chain"][step_key] = processed_file
+        
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(file_status, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self._log(f"[Step3] 更新文件流转链失败：{e}", "error")
     
     # ==================== 清除数据功能 ====================
     

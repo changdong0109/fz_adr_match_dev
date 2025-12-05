@@ -28,11 +28,12 @@ class ValidationEngine:
                  original_customer_file: str,
                  db_index: Dict,  # 预先构建的数据库索引（在主线程中构建）
                  shp_index: Dict,  # 预先构建的SHP索引（在主线程中构建，已转换为数据库坐标系）
-                 original_shp_gid_field: str,
-                 database_match_field: str,  # 固定为'name'
-                 source_match_fields: List[str],  # 支持多个字段的列表
-                 deviation_threshold: float = 10.0,
-                 db_crs: Optional[QgsCoordinateReferenceSystem] = None) -> Dict:
+                original_shp_gid_field: str,
+                database_match_field: str,  # 固定为'name'
+                source_match_fields: List[str],  # 匹配结果文件中的字段名（用于匹配结果验证）
+                deviation_threshold: float = 10.0,
+                db_crs: Optional[QgsCoordinateReferenceSystem] = None,
+                original_match_fields: Optional[List[str]] = None) -> Dict:  # Step2配置的原始字段名（用于原始客户数据验证）
         """
         执行验证
         
@@ -65,9 +66,11 @@ class ValidationEngine:
                 return self._error_result("原始客户数据文件加载失败")
             
             # 2. 验证原始客户数据在数据库中的完整性（索引已预先构建）
+            # 原始客户数据验证需要使用原始字段名（Step2配置的字段名），而不是匹配结果文件中的字段名
+            original_fields = original_match_fields if original_match_fields else source_match_fields  # 如果没有提供，使用source_match_fields作为兜底
             self._progress(30, 100, "验证原始客户数据完整性...")
             original_completeness = self._validate_original_completeness(
-                original_df, db_index, source_match_fields
+                original_df, db_index, original_fields
             )
             
             # 5. 验证匹配结果在数据库中的完整性

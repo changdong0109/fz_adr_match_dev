@@ -856,8 +856,19 @@ class Step4Widget(BaseStepWidget):
         src_key = f"[源表]{src_name}"
         tgt_key = f"[目标表{row+1}]{tgt_name}"
         
-        # 调用并获取返回值
-        summary = self.open_match_modal(src_key, tgt_key)
+        # 调用并获取返回值（现在是JSON字符串，包含pairs和summary）
+        config_json = self.open_match_modal(src_key, tgt_key)
+        
+        # 解析配置
+        import json
+        summary = ""
+        if config_json:
+            try:
+                config = json.loads(config_json)
+                summary = config.get("summary", "")
+            except:
+                # 兼容旧格式（直接是摘要字符串）
+                summary = config_json
         
         # 更新按钮状态（匹配字段列索引为3）
         btn_match = self.tgt_table.cellWidget(row, 3)
@@ -871,11 +882,11 @@ class Step4Widget(BaseStepWidget):
             btn_match.style().unpolish(btn_match)
             btn_match.style().polish(btn_match)
         
-        # 保存到任务组
+        # 保存到任务组（保存完整的JSON配置，而不仅仅是摘要）
         group = self._task_groups[self._current_group_idx]
         targets = group.get("targets", [])
         if row < len(targets):
-            targets[row]["match_fields"] = summary
+            targets[row]["match_fields"] = config_json if config_json else ""
     
     def _save_current_config(self):
         """保存当前任务组配置"""
@@ -900,11 +911,16 @@ class Step4Widget(BaseStepWidget):
                     old_filter = old_targets[r].get("filter", "")
                     old_match_fields = old_targets[r].get("match_fields", "")
                 
+                target_table = combo.currentText()
+                # 查找目标表对应的原始 SHP 文件路径
+                original_path = self._find_original_shp_path_from_target(target_table)
+                
                 new_targets.append({
-                    "table": combo.currentText(),
+                    "table": target_table,
                     "filter": old_filter,
                     "match_fields": old_match_fields,
-                    "match_desc": desc_item.text() if desc_item else ""
+                    "match_desc": desc_item.text() if desc_item else "",
+                    "original_path": original_path  # 新增：原始 SHP 文件路径
                 })
         group["targets"] = new_targets
         group["status"] = "待执行"
@@ -912,6 +928,59 @@ class Step4Widget(BaseStepWidget):
         self._persist_tasks()  # 持久化
         self._refresh_task_list()
         self._log(f"[Step4] 保存任务组配置: {group['name']}", "info")
+    
+    def _find_original_shp_path_from_target(self, target_table: str) -> str:
+        """
+        从目标表文件名查找对应的原始 SHP 文件路径
+        
+        Args:
+            target_table: 目标表文件名（如：节点.csv 或 节点_清洗_标准化.csv）
+            
+        Returns:
+            原始 SHP 文件路径，如果找不到则返回空字符串
+        """
+        if not self.global_config:
+            return ""
+        
+        try:
+            import json
+            region_info = self.global_config.get_region_info()
+            cache_folder = region_info.get('cache_folder', '')
+            if not cache_folder:
+                return ""
+            
+            file_status_path = os.path.join(cache_folder, "file_status.json")
+            if not os.path.exists(file_status_path):
+                return ""
+            
+            with open(file_status_path, 'r', encoding='utf-8') as f:
+                file_status = json.load(f)
+            
+            # 查找目标表对应的文件记录
+            for file_name, status in file_status.items():
+                if isinstance(status, dict):
+                    file_chain = status.get('file_chain', {})
+                    
+                    # 检查 step1, step2_cleaned, step3_parsed 是否匹配
+                    if (file_chain.get('step1') == target_table or
+                        file_chain.get('step2_cleaned') == target_table or
+                        file_chain.get('step3_parsed') == target_table or
+                        file_name == target_table):
+                        
+                        # 获取原始 SHP 文件路径
+                        original_path = file_chain.get('step1_original', '')
+                        if original_path and original_path.lower().endswith('.shp'):
+                            return original_path
+                        
+                        # 如果没有 step1_original，尝试从 source_path 获取
+                        source_path = status.get('source_path', '')
+                        if source_path and source_path.lower().endswith('.shp'):
+                            return source_path
+            
+            return ""
+        except Exception as e:
+            self._log(f"[Step4] 查找原始 SHP 文件路径失败: {e}", "warning")
+            return ""
     
     # ===== 数据统计方法 =====
     

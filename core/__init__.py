@@ -67,7 +67,8 @@ from .match_executor import MatchExecutor, MatchTaskManager
 
 # 旧匹配引擎（保留向后兼容）
 from .match_engine import MatchEngine
-from .address_matcher import AddressMatcher
+# AddressMatcher 已弃用，不再自动导入
+# 如需使用，请直接导入：from core.address_matcher import AddressMatcher
 
 
 __all__ = [
@@ -102,5 +103,5 @@ __all__ = [
     
     # 弃用模块（向后兼容）
     'MatchEngine',
-    'AddressMatcher',
+    # 'AddressMatcher',  # 已弃用，不再导出，避免警告
 ]

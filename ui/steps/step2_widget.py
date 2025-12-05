@@ -729,6 +729,12 @@ class Step2Widget(BaseStepWidget):
             if file_name in self.file_configs:
                 self.file_configs[file_name]['cleaned'] = '已清洗'
                 self._update_step1_cleaned_status(file_name, '已清洗')
+                
+                # 记录文件流转链：原始文件名 → 清洗后文件名
+                cleaned_file = result.get('valid_file', '')
+                if cleaned_file:
+                    cleaned_file_name = os.path.basename(cleaned_file)
+                    self._update_file_chain(file_name, 'step2_cleaned', cleaned_file_name)
     
     def _on_clean_finished(self, summary: dict):
         """清洗任务完成"""
@@ -928,6 +934,56 @@ class Step2Widget(BaseStepWidget):
                 json.dump(file_status, f, ensure_ascii=False, indent=2)
         except Exception as e:
             self._log(f"[Step2] 保存清洗状态失败：{e}", "error")
+    
+    def _update_file_chain(self, original_file: str, step_key: str, processed_file: str):
+        """
+        更新文件流转链
+        
+        Args:
+            original_file: 原始文件名（如：廊坊工商户.csv）
+            step_key: 步骤键（如：step2_cleaned, step3_parsed）
+            processed_file: 处理后的文件名（如：廊坊工商户_清洗.csv）
+        """
+        cache_file = self._get_project_cleaned_status_file()
+        if not cache_file:
+            return
+        
+        # 读取现有缓存
+        file_status = {}
+        if os.path.exists(cache_file):
+            try:
+                import json
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    file_status = json.load(f)
+            except:
+                pass
+        
+        # 初始化文件状态
+        if original_file not in file_status:
+            file_status[original_file] = {}
+        if isinstance(file_status[original_file], str):
+            file_status[original_file] = {"cleaned": file_status[original_file]}
+        
+        # 初始化file_chain（如果不存在）
+        if "file_chain" not in file_status[original_file]:
+            file_status[original_file]["file_chain"] = {}
+            # 如果已有step1_original，保留；否则设置step1
+            if "step1_original" not in file_status[original_file]["file_chain"]:
+                if "step1" not in file_status[original_file]["file_chain"]:
+                    file_status[original_file]["file_chain"]["step1"] = original_file
+        
+        # 更新file_chain
+        file_status[original_file]["file_chain"][step_key] = processed_file
+        
+        # 保存
+        try:
+            import json
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(file_status, f, ensure_ascii=False, indent=2)
+            self._log(f"[Step2] 已更新文件流转链: {original_file} → {processed_file} ({step_key})", "info")
+        except Exception as e:
+            self._log(f"[Step2] 更新文件流转链失败：{e}", "error")
     
     def _load_cleaned_status_from_project_cache(self) -> dict:
         """

@@ -57,6 +57,42 @@ class ShpConvertThread(QThread):
                 DataLoader.convert_to_csv(shp_file, output_path)
                 success_count += 1
                 
+                # 将原始SHP文件复制到根目录下的原始SHP数据目录
+                # 这样原始SHP文件就在根目录下留存，便于Step5加载
+                try:
+                    import shutil
+                    global_config = self._get_global_config()
+                    if global_config:
+                        region_info = global_config.get_region_info()
+                        base_folder = region_info.get('base_folder', '')
+                        province = region_info.get('province', '')
+                        city = region_info.get('city', '')
+                        county = region_info.get('county', '')
+                        
+                        if base_folder and province and city:
+                            # 创建原始SHP数据目录：{省}{市}原始SHP数据
+                            region_prefix = f"{province}{city}{county}".strip()
+                            original_shp_folder = os.path.join(base_folder, f"{region_prefix}原始SHP数据")
+                            os.makedirs(original_shp_folder, exist_ok=True)
+                            
+                            # 复制SHP文件及其相关文件（.shp, .shx, .dbf, .prj等）
+                            shp_base_name = os.path.basename(shp_file)
+                            shp_base_stem = os.path.splitext(shp_base_name)[0]
+                            shp_dir = os.path.dirname(shp_file)
+                            
+                            # 复制所有相关文件
+                            for ext in ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx', '.qpj']:
+                                src_file = os.path.join(shp_dir, f"{shp_base_stem}{ext}")
+                                if os.path.exists(src_file):
+                                    dst_file = os.path.join(original_shp_folder, f"{shp_base_stem}{ext}")
+                                    shutil.copy2(src_file, dst_file)
+                            
+                            # 更新shp_file路径为根目录下的路径
+                            shp_file = os.path.join(original_shp_folder, shp_base_name)
+                except Exception as e:
+                    # 如果复制失败，使用原始路径（不影响转换流程）
+                    pass
+                
                 # 发送文件转换完成信号
                 self.file_converted.emit(shp_file, output_file_name, "success")
                 
@@ -481,13 +517,71 @@ class Step1Widget(BaseStepWidget):
         else:
             source_type = "其他"
         
+        # ========== 将所有原始文件复制到根目录下的对应文件夹 ==========
+        original_file_path = source_path  # 默认使用原始路径
+        try:
+            import shutil
+            global_config = self._get_global_config()
+            if global_config:
+                region_info = global_config.get_region_info()
+                base_folder = region_info.get('base_folder', '')
+                province = region_info.get('province', '')
+                city = region_info.get('city', '')
+                county = region_info.get('county', '')
+                
+                if base_folder and province and city:
+                    region_prefix = f"{province}{city}{county}".strip()
+                    
+                    if ext == '.shp':
+                        # SHP文件：复制到 {省}{市}原始SHP数据/
+                        original_folder = os.path.join(base_folder, f"{region_prefix}原始SHP数据")
+                        os.makedirs(original_folder, exist_ok=True)
+                        
+                        # 复制SHP文件及其所有相关文件
+                        shp_base_stem = os.path.splitext(file_name)[0]
+                        shp_dir = os.path.dirname(source_path)
+                        copied_files = []
+                        
+                        for shp_ext in ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx', '.qpj']:
+                            src_file = os.path.join(shp_dir, f"{shp_base_stem}{shp_ext}")
+                            if os.path.exists(src_file):
+                                dst_file = os.path.join(original_folder, f"{shp_base_stem}{shp_ext}")
+                                shutil.copy2(src_file, dst_file)  # 覆盖已存在的文件
+                                copied_files.append(shp_ext)
+                        
+                        original_file_path = os.path.join(original_folder, file_name)
+                        self._log(f"[Step1] 已复制原始SHP文件到根目录: {original_folder} (包含: {', '.join(copied_files)})", "info")
+                    
+                    elif ext in ['.xlsx', '.xls', '.csv']:
+                        # 客户数据文件：复制到 {省}{市}原始客户数据/
+                        original_folder = os.path.join(base_folder, f"{region_prefix}原始客户数据")
+                        os.makedirs(original_folder, exist_ok=True)
+                        
+                        dst_file = os.path.join(original_folder, file_name)
+                        shutil.copy2(source_path, dst_file)  # 覆盖已存在的文件
+                        original_file_path = dst_file
+                        self._log(f"[Step1] 已复制原始客户数据文件到根目录: {original_folder}", "info")
+        except Exception as e:
+            self._log(f"[Step1] 复制原始文件到根目录失败: {e}，使用原始路径", "warning")
+        
         # 保存数据源信息
         self.data_sources[output_file_name] = {
-            'source_path': source_path,
+            'source_path': original_file_path,  # 使用根目录下的路径
             'saved_path': output_path,
             'source_type': source_type,
             'cleaned': '未清洗'
         }
+        
+        # 保存文件状态到项目缓存（包括source_path和file_chain）
+        self._save_file_status_to_project_cache(output_file_name, {
+            'source_type': source_type,
+            'cleaned': '未清洗',
+            'source_path': original_file_path,  # 根目录下的原始文件路径
+            'file_chain': {
+                'step1_original': original_file_path,  # 根目录下的原始文件路径
+                'step1': output_file_name  # 转换后的CSV文件名
+            }
+        })
         
         # 添加到表格
         self.add_data_source(output_file_name, source_type, '未清洗')
@@ -614,8 +708,11 @@ class Step1Widget(BaseStepWidget):
                         source_type = cached_status.get('source_type', default_source_type)
                         cleaned = cached_status.get('cleaned', '未清洗')
                         
+                        # 从缓存中读取source_path
+                        source_path = cached_status.get('source_path', '')
+                        
                         self.data_sources[file_name] = {
-                            'source_path': '',  # 原始路径未知
+                            'source_path': source_path,  # 从缓存读取原始路径
                             'saved_path': file_path,
                             'source_type': source_type,
                             'cleaned': cleaned
@@ -693,6 +790,16 @@ class Step1Widget(BaseStepWidget):
         # 更新状态
         if file_name not in file_status:
             file_status[file_name] = {}
+        
+        # 特殊处理file_chain：如果status_updates中有file_chain，需要合并而不是覆盖
+        if 'file_chain' in status_updates and 'file_chain' in file_status[file_name]:
+            # 合并file_chain
+            existing_chain = file_status[file_name]['file_chain']
+            new_chain = status_updates['file_chain']
+            existing_chain.update(new_chain)  # 合并新的链信息
+            status_updates = status_updates.copy()  # 复制，避免修改原字典
+            status_updates['file_chain'] = existing_chain
+        
         file_status[file_name].update(status_updates)
         
         # 保存
@@ -850,15 +957,63 @@ class Step1Widget(BaseStepWidget):
         if status == "success":
             self._log(f"[Step1] 已转换：{os.path.basename(shp_file)} → {output_file}", "info")
             
+            # 将原始SHP文件复制到根目录下的原始SHP数据目录
+            original_shp_path = shp_file  # 默认使用原始路径
+            try:
+                import shutil
+                global_config = self._get_global_config()
+                if global_config:
+                    region_info = global_config.get_region_info()
+                    base_folder = region_info.get('base_folder', '')
+                    province = region_info.get('province', '')
+                    city = region_info.get('city', '')
+                    county = region_info.get('county', '')
+                    
+                    if base_folder and province and city:
+                        # 创建原始SHP数据目录：{省}{市}原始SHP数据
+                        region_prefix = f"{province}{city}{county}".strip()
+                        original_shp_folder = os.path.join(base_folder, f"{region_prefix}原始SHP数据")
+                        os.makedirs(original_shp_folder, exist_ok=True)
+                        
+                        # 复制SHP文件及其相关文件（.shp, .shx, .dbf, .prj等）
+                        shp_base_name = os.path.basename(shp_file)
+                        shp_base_stem = os.path.splitext(shp_base_name)[0]
+                        shp_dir = os.path.dirname(shp_file)
+                        
+                        # 复制所有相关文件
+                        copied_files = []
+                        for ext in ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx', '.qpj']:
+                            src_file = os.path.join(shp_dir, f"{shp_base_stem}{ext}")
+                            if os.path.exists(src_file):
+                                dst_file = os.path.join(original_shp_folder, f"{shp_base_stem}{ext}")
+                                shutil.copy2(src_file, dst_file)
+                                copied_files.append(ext)
+                        
+                        # 更新original_shp_path为根目录下的路径
+                        original_shp_path = os.path.join(original_shp_folder, shp_base_name)
+                        self._log(f"[Step1] 已复制原始SHP文件到根目录: {original_shp_folder} (包含: {', '.join(copied_files)})", "info")
+            except Exception as e:
+                self._log(f"[Step1] 复制原始SHP文件到根目录失败: {e}，使用原始路径", "warning")
+            
             # 如果设置了自动添加，添加到表格
             if self.chk_auto_add.isChecked():
                 output_path = os.path.join(self._convert_thread.shp_folder, output_file)
                 self.data_sources[output_file] = {
-                    'source_path': shp_file,
+                    'source_path': original_shp_path,  # 使用根目录下的路径
                     'saved_path': output_path,
                     'source_type': 'GIS 数据',
                     'cleaned': '未清洗'
                 }
+                # 保存文件状态到项目缓存（包括source_path和file_chain）
+                self._save_file_status_to_project_cache(output_file, {
+                    'source_type': 'GIS 数据',
+                    'cleaned': '未清洗',
+                    'source_path': original_shp_path,  # 根目录下的原始SHP文件路径
+                    'file_chain': {
+                        'step1_original': original_shp_path,  # 根目录下的原始文件路径
+                        'step1': output_file  # 转换后的CSV文件名
+                    }
+                })
                 self.add_data_source(output_file, 'GIS 数据', '未清洗')
         else:
             self._log(f"[Step1] 转换失败 {os.path.basename(shp_file)}: {status}", "error")

@@ -4,6 +4,7 @@ from .base_step_widget import BaseStepWidget
 from .global_config_widget import GlobalConfigWidget
 from .result_dialog import ResultDialog
 from .progress_dialog import ProgressDialog
+from .pagination_widget import PaginationWidget
 
 __all__ = [
     'TaskManager',
@@ -11,5 +12,6 @@ __all__ = [
     'GlobalConfigWidget',
     'ResultDialog',
     'ProgressDialog',
+    'PaginationWidget',
 ]
 

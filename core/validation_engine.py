@@ -381,7 +381,18 @@ class ValidationEngine:
                                     source_fields: List[str],
                                     threshold: float,
                                     db_crs: Optional[QgsCoordinateReferenceSystem] = None) -> Dict:
-        """验证位置偏差（支持多个字段组合）"""
+        """
+        验证位置偏差（支持多个字段组合）
+        
+        统计说明：
+        - total_attempted: 匹配结果总数（尝试检查的所有记录）
+        - total_checked: 成功检查数（同时有原始坐标和数据库坐标的记录）
+        - within_threshold: 在阈值内的记录数
+        - exceed_threshold: 超过阈值的记录数
+        - no_shp_coord: 无法获取原始坐标的记录数（匹配结果中的GID在原始SHP文件中找不到）
+        - no_db_coord: 无法获取数据库坐标的记录数（匹配结果在数据库点图层中找不到对应坐标）
+        """
+        total_attempted = len(match_df)  # 匹配结果总数
         within_threshold = 0
         exceed_threshold = 0
         no_shp_coord = 0

@@ -2378,9 +2378,10 @@ class Step5Widget(BaseStepWidget):
         within_threshold = deviation_stats.get('within_threshold', 0)
         exceed_threshold = deviation_stats.get('exceed_threshold', 0)
         
-        # 重复数据统计
+        # 重复数据统计 - 使用实际重复记录数量，而不是唯一重复值数量
         duplicate_stats = stats.get('duplicates', {})
-        duplicate_values = duplicate_stats.get('duplicate_values', 0)
+        # 优先使用duplicate_records（重复记录总数），如果没有则使用duplicate_values
+        duplicate_count = duplicate_stats.get('duplicate_records', duplicate_stats.get('duplicate_values', 0))
         
         # 验证通过（匹配结果在数据库中存在且位置偏差在阈值内）
         valid_count = match_found - exceed_threshold
@@ -2392,8 +2393,8 @@ class Step5Widget(BaseStepWidget):
         # 位置偏差（超过阈值）
         self._update_stat_card(self.stat_deviation, "位置偏差", str(exceed_threshold))
         
-        # 重复数据
-        self._update_stat_card(self.stat_duplicate, "重复数据", str(duplicate_values))
+        # 重复数据 - 显示实际重复记录数量
+        self._update_stat_card(self.stat_duplicate, "重复数据", str(duplicate_count))
     
     def _update_stat_card(self, card_widget: QWidget, title: str, value: str):
         """更新单个统计卡片"""
@@ -2572,16 +2573,14 @@ class Step5Widget(BaseStepWidget):
             # 提取匹配到的数据库code（从duplicate中直接获取）
             db_code = duplicate.get('db_code', '')
             
-            # 处理match_value，去掉code:或name:前缀
-            match_value = duplicate.get('match_value', '')
-            if match_value.startswith('code:') or match_value.startswith('name:'):
-                match_value = match_value.split(':', 1)[1] if ':' in match_value else match_value
+            # 从源表行数据中提取匹配字段的值（使用_get_match_value_from_row方法）
+            match_value = self._get_match_value_from_row(row_data)
             
             self._all_problems.append({
                 'type': 'duplicate',
                 'target_gid': target_gid,
                 'db_code': db_code,
-                'match_value': match_value,
+                'match_value': match_value,  # 使用源表的匹配字段值
                 'status': f"重复({duplicate.get('duplicate_count', 0)}个)",
                 'deviation': None,
                 'shp_coord': None,
@@ -2630,6 +2629,10 @@ class Step5Widget(BaseStepWidget):
         total_time = time.time() - start_time
         self._log(f"[Step5] ========== 问题数据表格更新完成 ==========", "info")
         self._log(f"[Step5] 总耗时={total_time:.2f}秒 (缺失={missing_time:.2f}秒, 偏差={deviation_time:.2f}秒, 重复={duplicate_time:.2f}秒)", "info")
+        
+        # 根据实际收集到的问题数据数量更新统计卡片（确保统计准确）
+        duplicate_count_actual = duplicate_count  # 使用实际收集到的重复数据数量
+        self._update_stat_card(self.stat_duplicate, "重复数据", str(duplicate_count_actual))
     
     def _display_problems(self, problems: List[Dict]):
         """显示问题数据到表格（优化版本：禁用更新，批量设置）"""
